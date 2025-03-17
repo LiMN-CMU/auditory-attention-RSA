@@ -8,7 +8,7 @@ import apply_ICA
 import epoch
 
 # Load config
-config_path = Path("../../config/preprocessing-001.json")
+config_path = Path("/lab_data/barblab/Jinhee/auditory-attention-RSA/config/preprocessing-001.json")
 with open(config_path, "r") as f:
     config = json.load(f)
 

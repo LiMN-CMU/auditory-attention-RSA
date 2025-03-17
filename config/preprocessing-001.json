@@ -1,10 +1,10 @@
 {
     "mode": "auto",
     "subjects": [
-        2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34
+        2
     ],
     "task": "craa",
-    "base_dir": "/Users/jinhee/Library/CloudStorage/SynologyDrive-jinhee20250212/[]WORK-CMU_PhD/Code/auditory-attention-RSA/data",
+    "base_dir": "/lab_data/barblab/Jinhee/auditory-attention-RSA/data",
     "raw_to_bids": {
         "input_folder": "sourcedata",
         "output_folder": "",
