@@ -11,17 +11,16 @@ import epoch
 config_path = Path("../../config/preprocessing-001.json")
 with open(config_path, "r") as f:
     config = json.load(f)
-mode = "auto"
 
 # Run preprocessing steps
 print("=== Changing to BIDS format ===")
-# raw_to_bids.run(config)
+raw_to_bids.run(config)
 
 print("=== Running Preprocessing ===")
-# filter.run(config)
-# reject_channel.run(config, mode)
-# calculate_ICA.run(config)
-apply_ICA.run(config, mode)
-epoch.run(config, mode)
+filter.run(config)
+reject_channel.run(config, config["mode"])
+calculate_ICA.run(config)
+apply_ICA.run(config, config["mode"])
+epoch.run(config, config["mode"])
 
 print("=== Preprocessing Completed ===")
