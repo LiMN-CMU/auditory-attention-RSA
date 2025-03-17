@@ -4,7 +4,7 @@ from mne_bids import BIDSPath
 from mne.preprocessing import ICA
 
 # Parameters
-def run(config):
+def run(config, sub_i):
     task = config["task"]
     subjects = config["subjects"]
 
@@ -19,52 +19,51 @@ def run(config):
     max_iter = config_ICA["ICA_max_iteration"]
     stop_tol = config_ICA["ICA_stop_tolerance"]
 
-    for sub_id in subjects:
-        sub_str = f"sub-{sub_id:03d}"
-        print(f"\n=== Processing subject: {sub_str} ===")
-        bids_in = BIDSPath(
-            subject=sub_str.split('-')[1],
-            task=task,
-            suffix='eeg',
-            processing=in_dir.name,
-            extension='.fif',
-            datatype='eeg',
-            root=in_dir
-        )
-        in_file = bids_in.fpath
-        
-        bids_out = BIDSPath(
-            subject=sub_str.split('-')[1],
-            task=task,
-            processing=out_dir.name,
-            extension='.fif',
-            suffix='eeg',
-            datatype='eeg',
-            root=out_dir
-        )
-        out_file = bids_out.fpath
-        out_file.parent.mkdir(parents=True, exist_ok=True) 
+    sub_str = f"sub-{sub_i:03d}"
+    print(f"\n=== Processing subject: {sub_str} ===")
+    bids_in = BIDSPath(
+        subject=sub_str.split('-')[1],
+        task=task,
+        suffix='eeg',
+        processing=in_dir.name,
+        extension='.fif',
+        datatype='eeg',
+        root=in_dir
+    )
+    in_file = bids_in.fpath
+    
+    bids_out = BIDSPath(
+        subject=sub_str.split('-')[1],
+        task=task,
+        processing=out_dir.name,
+        extension='.fif',
+        suffix='eeg',
+        datatype='eeg',
+        root=out_dir
+    )
+    out_file = bids_out.fpath
+    out_file.parent.mkdir(parents=True, exist_ok=True) 
 
-        print(f"Loading file: {in_file}")
-        raw = mne.io.read_raw_fif(in_file, preload=True)
-        # calculate ICA on filtered data
-        filt_raw = raw.copy().filter(l_freq=fc_bpf[0], h_freq=fc_bpf[1])
+    print(f"Loading file: {in_file}")
+    raw = mne.io.read_raw_fif(in_file, preload=True)
+    # calculate ICA on filtered data
+    filt_raw = raw.copy().filter(l_freq=fc_bpf[0], h_freq=fc_bpf[1])
 
-        # Run ICA and ICLabel
-        n_eeg_chan = len(mne.pick_types(raw.info, eeg=True))
-        ica = ICA(
-            n_components=n_eeg_chan, 
-            method=ica_method, 
-            fit_params=dict(extended=True, w_change=stop_tol),  # extended infomax
-            max_iter=max_iter,
-            random_state=random_state,
-            verbose=True
-        )
-        ica.fit(filt_raw)
+    # Run ICA and ICLabel
+    n_eeg_chan = len(mne.pick_types(raw.info, eeg=True))
+    ica = ICA(
+        n_components=n_eeg_chan, 
+        method=ica_method, 
+        fit_params=dict(extended=True, w_change=stop_tol),  # extended infomax
+        max_iter=max_iter,
+        random_state=random_state,
+        verbose=True
+    )
+    ica.fit(filt_raw)
 
-        # Save
-        ica_fname = out_file.parent / f"{out_file.stem}-ica.fif"  # ICA solution
-        ica.save(ica_fname, overwrite=True)
-        raw.save(out_file.with_suffix(".fif"), overwrite=True)
+    # Save
+    ica_fname = out_file.parent / f"{out_file.stem}-ica.fif"  # ICA solution
+    ica.save(ica_fname, overwrite=True)
+    raw.save(out_file.with_suffix(".fif"), overwrite=True)
 
-        print(f"Processed and saved: {out_file}")
+    print(f"Processed and saved: {out_file}")
