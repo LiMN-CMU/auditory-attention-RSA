@@ -1,3 +1,4 @@
+import argparse
 import json
 from pathlib import Path
 import raw_to_bids
@@ -6,21 +7,51 @@ import reject_channel
 import calculate_ICA
 import apply_ICA
 import epoch
+import multiprocessing
 
 # Load config
-config_path = Path("/lab_data/barblab/Jinhee/auditory-attention-RSA/config/preprocessing-001.json")
+parser = argparse.ArgumentParser()
+parser.add_argument("--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+args = parser.parse_args()
+config_id = args.config_id
+
+config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
 with open(config_path, "r") as f:
     config = json.load(f)
 
-# Run preprocessing steps
-print("=== Changing to BIDS format ===")
-raw_to_bids.run(config)
+def process_subject(sub_id):
+    print(f"\n=== Processing Subject: {sub_id} ===")
 
-print("=== Running Preprocessing ===")
-filter.run(config)
-reject_channel.run(config, config["mode"])
-calculate_ICA.run(config)
-apply_ICA.run(config, config["mode"])
-epoch.run(config, config["mode"])
+    print("Converting to BIDS format...")
+    raw_to_bids.run(config, sub_id)
 
-print("=== Preprocessing Completed ===")
+    print("Running filtering...")
+    filter.run(config, sub_id)
+
+    print("Rejecting channels...")
+    reject_channel.run(config, sub_id, config["mode"])
+
+    print("Calculating ICA...")
+    calculate_ICA.run(config, sub_id)
+
+    print("Applying ICA...")
+    apply_ICA.run(config, sub_id, config["mode"])
+
+    print("Epoching data...")
+    epoch.run(config, sub_id, config["mode"])
+
+    print(f"=== Subject {sub_id} processing completed ===\n")
+
+
+if __name__ == "__main__":
+    # num_workers = min(len(config["subjects"]), multiprocessing.cpu_count())  # Use available CPUs
+    num_workers = 2
+    print(f"Using {num_workers} parallel workers.")
+    
+    # Create a pool of workers
+    with multiprocessing.Pool(processes=num_workers) as pool:
+        pool.map(process_subject, config["subjects"])
+    # for sub_i in config["subjects"]:
+    #     process_subject(sub_i)
+
+    print("=== All Preprocessing Completed ===")
