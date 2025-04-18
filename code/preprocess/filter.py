@@ -1,3 +1,4 @@
+import argparse
 from joblib import Parallel, delayed
 import json
 from pathlib import Path
@@ -121,3 +122,16 @@ def run(config, sub_i):
     # Save processed data in FIF format within BIDS derivatives
     combined_raw.save(bids_out.fpath.with_suffix(".fif"), overwrite=True)
     
+
+if __name__ == "__main__":
+    # Load config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)

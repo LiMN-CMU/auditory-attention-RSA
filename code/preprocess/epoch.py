@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import mne
 import numpy as np
@@ -106,3 +107,16 @@ def run(config, sub_i, mode="manual"):
     # event_file = out_file.with_suffix('.eve')
     # mne.write_events(event_file, events, overwrite=True)
     
+    
+if __name__ == "__main__":
+    # Load config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)

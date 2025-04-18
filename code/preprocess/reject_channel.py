@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import mne
 import numpy as np
@@ -76,10 +77,7 @@ def run(config, sub_i, mode="manual"):
     if flagged_channels and mode == "manual":
         # Visual inspection (with bad channels being red)
         raw.info['bads'] = flagged_channels
-        raw.plot(
-            bad_color='red',
-            block=True
-        ) # decide whether to remove the channel or not
+        raw.plot(bad_color='red', block=True) # decide whether to remove the channel or not
         removed_channels = raw.info["bads"]  # final channels to be removed
     else:
         # automatic bad channel flag
@@ -87,7 +85,7 @@ def run(config, sub_i, mode="manual"):
 
     if removed_channels:
         print(f"Dropped channels: {removed_channels}")
-        raw.drop_channels(removed_channels)
+        raw.info['bads'] = list(set(removed_channels))
         # raw.interpolate_bads(reset_bads=True)  # interplate bad channels
         
         reject_meta_dict = {
@@ -95,15 +93,27 @@ def run(config, sub_i, mode="manual"):
             "ChannelsFlaggedVariance": sorted(list(high_var)),
             "ChannelsFlaggedAmplitude": sorted(list(bad_amp)),
         }
-        # Save ICA rejection metadata as JSON
         json_outfile = out_file.with_suffix(".json")
         with open(json_outfile, "w") as f:
             json.dump(reject_meta_dict, f, indent=4)
 
-        print(f"Saved ICA rejection metadata to: {json_outfile}")
+        print(f"Saved metadata to: {json_outfile}")
     else:
         print("No channels removed.")
 
     # save file and metadata
     raw.save(out_file, overwrite=True)
 
+
+if __name__ == "__main__":
+    # Load config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)
