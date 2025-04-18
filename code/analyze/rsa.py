@@ -1,116 +1,179 @@
+import argparse
+import json
 from pathlib import Path
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from mne_bids import BIDSPath
 from sklearn.svm import LinearSVC
+from sklearn.linear_model import LogisticRegression
 from joblib import Parallel, delayed
 from sklearn.preprocessing import StandardScaler
 import time
-
-# Parameters
-subjects = [2]
-task = "craa"
-base_dir = Path("..") / "data" / "derivatives"
-in_folder = "cwt"
-
-n_permutations = 1000  # Number of leave-one-trial-out iterations
+from itertools import product
 
 # Function to train SVM and extract weights and accuracy
-def train_svm_permutation(X, y):
+def train_model_permutation(X, y, model_type, test_idx, regularization_param=1):
     """
-    Train an SVM on data X with labels y using a two-trial test split (one from each class).
-    Returns: SVM weights and accuracy.
+    Train a model (SVM or linear regression) on X, y with specified test_idx.
+    Returns: weights and accuracy (for SVM) or R² (for regression).
     """
-    # Pick one trial from each class
-    test_idx_0 = np.random.randint(0, len(y) // 2)  # From class 0
-    test_idx_1 = np.random.randint(len(y) // 2, len(y))  # From class 1
-    test_indices = [test_idx_0, test_idx_1]
+    X_train = np.delete(X, test_idx, axis=0)
+    y_train = np.delete(y, test_idx)
+    X_test = X[test_idx]
+    y_test = y[test_idx]
+    
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
 
-    X_train = np.delete(X, test_indices, axis=0)
-    y_train = np.delete(y, test_indices)
-    X_test = X[test_indices]
-    y_test = y[test_indices]
+    if model_type == "svm":
+        model = LinearSVC(C=regularization_param)
+        model.fit(X_train, y_train)
+        weights = model.coef_.flatten()
+        logit = model.decision_function(X_test)[0]  # distance from decision threshold
+        acc = model.score(X_test, y_test) 
 
-    # Train SVM
-    svm = LinearSVC()
-    svm.fit(X_train, y_train)
+    elif model_type == "logistic_regression":
+        model = LogisticRegression(penalty='l2', C=1 / regularization_param, solver="liblinear")
+        model.fit(X_train, y_train)
+        weights = model.coef_.flatten()
+        logit = model.decision_function(X_test)[0]  # raw logit value. sigmoid(logit) = probability
+        y_pred = model.predict(X_test)
+        acc = np.mean(y_pred == y_test) 
 
-    # Get weight coefficients
-    weights = svm.coef_.flatten()
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
 
-    # Compute accuracy
-    acc = svm.score(X_test, y_test)
+    return weights, logit, acc
 
-    return weights, acc
+# Parameters
+def run(config, sub_i):
+    task = config["task"]
 
+    base_dir = Path(config["base_dir"])
+    config_rsa = config["rsa"]
+    in_dir = base_dir / config_rsa["input_folder"]
+    out_dir = base_dir / config_rsa["output_folder"]
+    
+    fs = config_rsa["sampling_rate"]
+    window_ms = config_rsa["target_time_window_ms"]  # ms window
+    window_samples = int((window_ms / 1000) * fs)  # Convert ms to samples
+    
+    feat_idx = config_rsa["frequency_band_index"]
+    model_type = config_rsa["decoder_model"]
+    model_regularization_parameter = config_rsa["model_regularization_parameter"]
 
-for sub_id in subjects:
-    sub_str = f"sub-{sub_id:03d}"
+    sub_str = f"sub-{sub_i:03d}"
     print(f"\n=== Processing subject: {sub_str} ===")
 
-    in_p = base_dir / in_folder / sub_str / "eeg"
-    out_p = in_p / "rdm_results"
-    out_p.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
+    epoch_type_dict = {'cue': config_rsa["epoch_boundary_cue"], 'target': config_rsa["epoch_boundary_target"]}
+    for epoch_type, epoch_boundary in epoch_type_dict.items():
+        print(f"=== Processing {epoch_type} epochs ===")
+        bids_in = BIDSPath(
+            subject=sub_str.split('-')[1],
+            task=task,
+            processing=in_dir.name,
+            datatype="eeg",
+            root=in_dir,
+            description=epoch_type
+        )
+        in_file = bids_in.fpath
+        power = np.load(in_file.with_suffix(".npy"))  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
+        
+        bids_out = BIDSPath(
+            subject=sub_str.split('-')[1],
+            task=task,
+            processing=out_dir.name,
+            datatype="eeg",
+            root=out_dir,
+            description=epoch_type
+        )
+        out_file = bids_out.fpath
+        out_file.parent.mkdir(parents=True, exist_ok=True)
 
-    in_file_cue = in_p / f"{sub_str}_task-{task}_proc-{in_folder}_type-target.npy"
-    power_cue = np.load(in_file_cue)  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
+        n_cond, n_trial, n_chan, n_feat, n_time = power.shape
+        time_vec = np.linspace(epoch_boundary[0], epoch_boundary[1], n_time)
+        
+        # Generate reproducible test indices
+        test_indices = list(product(range(n_trial), range(n_trial, 2 * n_trial)))
+        
+        target_times = config_rsa[f"target_time_{epoch_type}"]
+        target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in target_times]
+        time_indices = []
+        for target_time_idx in target_time_indices:
+            window_start = max(0, target_time_idx - window_samples // 2)
+            window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
+            time_indices.append(np.arange(window_start, window_end))
+        time_indices = np.concatenate(time_indices)
 
-    n_cond, n_trial, n_chan, n_feat, n_time = power_cue.shape
-    time_vec = np.linspace(-1.3, 1, n_time)
+        # Storage for weights and accuracy across permutations
+        all_weights = np.zeros((n_time, n_cond, n_cond, n_chan))
+        all_logits = np.zeros((n_time, n_cond, n_cond))
+        all_rdms = np.zeros((n_time, n_cond, n_cond))
 
-    # Storage for SVM weights and accuracy across permutations
-    all_svm_weights = np.zeros((n_feat, n_chan, n_permutations))
-    all_svm_accuracies = np.zeros((n_feat, n_permutations))
+        # Loop over features
+        # for feat_idx in range(n_feat):
+        print(f"\n=== Processing frequency band #{feat_idx} ===")
 
-    # Loop over features
-    for feat_idx in range(n_feat):
-        print(f"\n=== Processing Feature {feat_idx + 1}/{n_feat} ===")
-
-        for time_idx in range(n_time):
-            rdm_matrix = np.zeros((n_cond, n_cond))  # Initialize RDM matrix
-
+        for time_idx in time_indices:
             start_time = time.time()
             for cond1 in range(n_cond):
                 for cond2 in range(cond1 + 1, n_cond):
-                    trials1 = power_cue[cond1, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
-                    trials2 = power_cue[cond2, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    trials1 = power[cond1, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    trials2 = power[cond2, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
 
                     X = np.vstack((trials1, trials2))
-                    scaler = StandardScaler()
-                    X = scaler.fit_transform(X)
-                    y = np.array([0] * n_trial + [1] * n_trial)  # Labels for SVM
-
-                    # Parallel SVM training (n_permutations)
-                    # svm_results = Parallel(n_jobs=-1)(
-                    #     delayed(train_svm_permutation)(X, y) for _ in range(n_permutations)
-                    # )
-                    svm_results = []
-                    for _ in range(n_permutations):
-                        svm_result = train_svm_permutation(X, y)
-                        svm_results.append(svm_result)
+                    y = np.array([1] * n_trial + [0] * n_trial)  # cond1: positive weight, cond2: negative weight
+                    
+                    # Parallel training (n_perm)
+                    model_results = Parallel(n_jobs=-1)(
+                        delayed(train_model_permutation)(
+                            X, y, model_type, 
+                            regularization_param=model_regularization_parameter, 
+                            test_idx=list(test_indices[perm_i])) for perm_i in range(len(test_indices))
+                    )
 
                     # Extract weights and accuracies
-                    svm_weights, svm_accuracies = zip(*svm_results)
-                    svm_weights = np.array(svm_weights)  # Shape: (n_permutations, n_chan)
-                    svm_accuracies = np.array(svm_accuracies)  # Shape: (n_permutations,)
-
-                    # Store SVM weights and accuracies
-                    all_svm_weights[feat_idx, :, :] = svm_weights.T  # Store per channel
-                    all_svm_accuracies[feat_idx, :] = svm_accuracies
+                    weights, logits, accuracies = zip(*model_results)
+                    weights = np.array(weights)  # Shape: (n_perm, n_chan)
+                    logits = np.array(logits)  # Shape: (n_perm, n_chan)
+                    accuracies = np.array(accuracies)  # Shape: (n_perm,)
 
                     # Compute mean accuracy for RDM
-                    mean_acc = np.mean(svm_accuracies)
-                    rdm_matrix[cond1, cond2] = mean_acc
-                    rdm_matrix[cond2, cond1] = mean_acc  # Symmetric matrix
+                    # Store weights and accuracies
+                    all_weights[time_idx, cond1, cond2, :] = np.mean(weights, axis=0)
+                    all_logits[time_idx, cond1, cond2] = np.mean(logits, axis=0)
+                    mean_acc = np.mean(accuracies)
+                    all_rdms[time_idx, cond1, cond2] = mean_acc
+                    all_rdms[time_idx, cond2, cond1] = mean_acc  # symmetric
+                    
+                    (out_file.parent / "model-cross-validation").mkdir(parents=True, exist_ok=True)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_time-{time_idx}_weights.npy", weights)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_time-{time_idx}_logits.npy", logits)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_time-{time_idx}_accuracies.npy", accuracies)
 
             process_time = time.time() - start_time
             print(f"Time taken: {process_time:.2f}s")
 
-            # Save RDM
-            np.save(out_p / f"{sub_str}_feature-{feat_idx+1}_rdm.npy", rdm_matrix)
+        # Save RDM
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_target-time-only_rdm.npy", all_rdms)
 
-        # Save SVM Weights & Accuracy
-        np.save(out_p / f"{sub_str}_feature-{feat_idx+1}_svm_weights.npy", all_svm_weights[feat_idx])
-        np.save(out_p / f"{sub_str}_feature-{feat_idx+1}_svm_accuracies.npy", all_svm_accuracies[feat_idx])
+        # Save Weights & Accuracy
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_target-time-only_weights.npy", all_weights)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_target-time-only_logits.npy", all_logits)
 
-    print(f"\nAll RDMs, SVM weights, and accuracies saved for subject {sub_str}!\n")
+    print(f"\nAll RDMs, weights, and accuracies saved for subject {sub_str}!\n")
+    
+if __name__ == "__main__":
+    # Load config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_id", type=str, default="analysis-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)
