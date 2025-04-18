@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 subjects = [2]  # Add as many subject IDs as you need
 task = "craa"
 desc = "Apply morlet wavlet transform."
+category_labels = np.array([0] * 8 + [1] * 6 + [2] * 7)  # 0: space attention, 1: talker attention, 2: no attention (relax)
 
 base_dir = Path("..") / "data" / "derivatives"
 in_folder = "cwt"
@@ -33,7 +34,6 @@ for sub_id in subjects:
     n_cond, n_trial, n_chan, n_feat, n_time = power_cue.shape
     cond_vec = np.repeat(np.arange(n_cond), n_trial)
     # cond_vec = np.arange(n_cond)
-    category_labels = np.array([0] * 8 + [1] * 6 + [2] * 7)  # 0: space attention, 1: talker attention, 2: no attention (relax)
     
     quarter_trials = n_trial // 2  # TODO: check that it's divided into 25:75 or 75:25
     partitions = np.zeros(n_trial, dtype=int)
