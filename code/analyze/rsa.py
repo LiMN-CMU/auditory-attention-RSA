@@ -11,6 +11,7 @@ from joblib import Parallel, delayed
 from sklearn.preprocessing import StandardScaler
 import time
 from itertools import product
+import mne
 
 # Function to train SVM and extract weights and accuracy
 def train_model_permutation(X, y, model_type, test_idx, regularization_param=1):
@@ -59,7 +60,6 @@ def run(config, sub_i):
     fs = config_rsa["sampling_rate"]
     window_ms = config_rsa["target_time_window_ms"]  # ms window
     window_samples = int((window_ms / 1000) * fs)  # Convert ms to samples
-    
     feat_idx = config_rsa["frequency_band_index"]
     model_type = config_rsa["decoder_model"]
     model_regularization_parameter = config_rsa["model_regularization_parameter"]
@@ -79,7 +79,25 @@ def run(config, sub_i):
             description=epoch_type
         )
         in_file = bids_in.fpath
-        power = np.load(in_file.with_suffix(".npy"))  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
+        if config_rsa["input_folder"].startswith("derivatives/cwt"):
+            power = np.load(in_file.with_suffix(".npy"))  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
+            print(f"\n=== Processing frequency band #{feat_idx} ===")
+        elif config_rsa["input_folder"].startswith("derivatives/epoch"): 
+            epochs = mne.read_epochs(in_file, preload=True)
+            eeg_amp = epochs._data  # (n_cond * n_tial, n_chan, n_time)
+            
+            label_fpath = in_file.parent / (in_file.stem.split("_desc")[0] + '_conditions.npy')
+            condition_labels = np.load(label_fpath)
+            conds = range(1, config_rsa["num_condition"] + 1)
+            power = []
+            for cond_i in conds:
+                condition_amp = eeg_amp[condition_labels == cond_i]  # Select trials for condition
+                power.append(condition_amp)
+            power = np.stack(power, axis=0)  
+            power = power[:, :, :, np.newaxis, :]  # (n_cond, n_trial, n_chan, 1, n_time)
+            print(f"\n=== Processing EEG amplitude ===")
+        else:
+            raise Exception("Input folder should be either cwt or epoch")
         
         bids_out = BIDSPath(
             subject=sub_str.split('-')[1],
@@ -114,8 +132,6 @@ def run(config, sub_i):
 
         # Loop over features
         # for feat_idx in range(n_feat):
-        print(f"\n=== Processing frequency band #{feat_idx} ===")
-
         for time_idx in time_indices:
             start_time = time.time()
             for cond1 in range(n_cond):
