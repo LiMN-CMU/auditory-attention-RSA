@@ -4,6 +4,7 @@ from pathlib import Path
 import multiprocessing
 import cwt
 import rsa
+import rsamultiple
 
 # Load config
 parser = argparse.ArgumentParser()
@@ -17,11 +18,12 @@ with open(config_path, "r") as f:
 
 print(config)
 def process_subject(sub_id):
-    # print("Converting to BIDS format...")
-    cwt.run(config, sub_id)
+    # print("Extracting spectral map...")
+    # cwt.run(config, sub_id)
 
-    print("Running filtering...")
-    rsa.run(config, sub_id)
+    print("Running RSA...")
+    # rsa.run(config, sub_id)
+    rsamultiple.run(config, sub_id)
 
     print(f"=== Subject {sub_id} processing completed ===\n")
 
