@@ -74,6 +74,7 @@ def run(config, sub_i, mode="manual"):
     event_dict_cue = {key: val for key, val in event_dict.items() if "stim/type/cue" in key}  # audio cues
     event_dict_target = {key: val for key, val in event_dict.items() if "stim/type/target" in key}  # target syllable onset
 
+    # baseline extraction
     epochs_baseline = mne.Epochs(
         raw, events, event_id=event_dict_baseline, tmin=baseline_boundary[0], tmax=baseline_boundary[1],
         baseline=None, reject_by_annotation=True, preload=True, reject=None
@@ -82,6 +83,7 @@ def run(config, sub_i, mode="manual"):
     eeg_baseline_mean = eeg_baseline.mean(axis=2, keepdims=True)
     condition_labels = epochs_baseline.events[:, 2]
     
+    # extract cue and target epochs
     epochs_cue = mne.Epochs(
         raw, events, event_id=event_dict_cue, tmin=epoch_boundary_cue[0], tmax=epoch_boundary_cue[1],
         baseline=None, reject_by_annotation=True, preload=True, reject=None, picks="eeg"

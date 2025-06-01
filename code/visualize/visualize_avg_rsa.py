@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import mne
 from mne_bids import BIDSPath
 
-# Parameters
 def add_spacing(matrix, break_indices):
     size = matrix.shape[0]
     new_size = size + len(break_indices)
@@ -64,6 +63,7 @@ def average_rdm_by_category(weights, category_num_dict={"space": 8, "talker": 6,
 def run(config, sub_inds):
     task = config["task"]
     base_dir = Path(config["base_dir"])
+    config_id = config["configuration_id"]
     config_rsa = config["visualize_rsa"]
     in_dir = base_dir / config_rsa["input_folder"]
     out_dir = base_dir / config_rsa["output_folder"]
@@ -75,6 +75,7 @@ def run(config, sub_inds):
     
     feat_i = config_rsa["frequency_band_index"]
     breaks = config_rsa["rdm_plot_spacing_boundary"]  # where to insert spacing between groups
+    category_num_dict = config_rsa["category_number_dictionary"]
     
     montage_p = base_dir / "etc"
     with open(montage_p / "channel_dict_ABC.json", "r") as f:
@@ -129,7 +130,7 @@ def run(config, sub_inds):
         target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in target_times]
         
         # SVM Weights
-        group_category_svm_weights = average_rdm_by_category(group_avg_svm_weights)
+        group_category_svm_weights = average_rdm_by_category(group_avg_svm_weights, category_num_dict=category_num_dict)
             
         for i, target_time_idx in enumerate(target_time_indices):
             window_start = max(0, target_time_idx - window_samples // 2)
@@ -146,7 +147,7 @@ def run(config, sub_inds):
                         vmin=acc_min, vmax=acc_max, xticklabels=False, yticklabels=False)
             # plt.title(f"PCM-based RDM at time {target_times[i]} sec")
             plt.tight_layout()
-            out_file = out_dir / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_rdm_{target_times[i]:.1f}s.png"
+            out_file = out_dir / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_rdm_{target_times[i]:.1f}s.png"
             plt.savefig(out_file, dpi=300)
             plt.close()
             
@@ -159,7 +160,7 @@ def run(config, sub_inds):
                 weight_min = config_rsa[f"weight_boundary_{epoch_type}"][0]
                 weight_max = config_rsa[f"weight_boundary_{epoch_type}"][1]
                 evoked.plot_topomap(times=0, scalings=1, vlim=(weight_min, weight_max), time_format='', cmap='RdBu_r', size=3, show=True)
-                fig_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_weights_{target_times[i]:.1f}s_category-{cat_name}"
+                fig_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_weights_{target_times[i]:.1f}s_category-{cat_name}"
                 # plt.title(fig_name)
                 plt.savefig(out_file.parent / f"{fig_name}.png", dpi=300)
                 plt.close()
@@ -168,7 +169,7 @@ def run(config, sub_inds):
 if __name__ == "__main__":
     # Load config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="analysis-001", help="Configuration ID")
+    parser.add_argument("--config_id", type=str, default="visualize-001", help="Configuration ID")
     args = parser.parse_args()
     config_id = args.config_id
 

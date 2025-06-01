@@ -7,7 +7,7 @@ from mne.preprocessing import ICA
 from mne import set_config
 
 set_config('MNE_USE_NUMBA', 'true')  # Enable JIT acceleration
-set_config('MNE_NUM_THREADS', '4')   # Use 4 CPU threads TODO: hard-coded
+# set_config('MNE_NUM_THREADS', '4')   # Use 4 CPU threads TODO: hard-coded
 
 # Parameters
 def run(config, sub_i):

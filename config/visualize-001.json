@@ -27,24 +27,11 @@
     ],
     "task": "craa",
     "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
-    "cwt": {
-        "input_folder": "derivatives/epoch",
-        "output_folder": "derivatives/cwt",
-        "num_condition": 21,
-        "num_frequency_bin": 96,
-        "frequency_boundary": [
-            50,
-            30,
-            14,
-            8,
-            4,
-            2
-        ],
-        "scale_spacing_DJ": 0.05
-    },
-    "rsa": {
-        "input_folder": "derivatives/cwt",
-        "output_folder": "derivatives/rsa",
+    "visualize_rsa": {
+        "input_folder": "derivatives/rsa",
+        "output_folder": "derivatives/visualizersa",
+        "decoder_model": "svm",
+        "frequency_band_index": 2,
         "epoch_boundary_cue": [
             -1.3,
             1
@@ -58,7 +45,7 @@
         "target_time_cue": [
             -1.1,
             -0.5,
-            0,
+            0.0,
             0.25,
             0.5,
             0.9
@@ -66,13 +53,38 @@
         "target_time_target": [
             -0.2,
             -0.1,
-            0,
+            0.0,
             0.15,
             0.3,
             0.4
         ],
-        "frequency_band_index": 2,
-        "decoder_model": "logistic_regression",
-        "model_regularization_parameter": 0.1
+        "rdm_accuracy_boundary_cue": [
+            0.43,
+            0.57
+        ],
+        "weight_boundary_cue": [
+            -0.15,
+            0.15
+        ],
+        "rdm_accuracy_boundary_target": [
+            0.4,
+            0.6
+        ],
+        "weight_boundary_target": [
+            -0.15,
+            0.15
+        ],
+        "rdm_plot_spacing_boundary": [
+            8,
+            15
+        ],
+        "auditory_attention_categories": [
+            "space-space",
+            "talker-talker",
+            "relax-relax",
+            "space-relax",
+            "space-talker",
+            "talker-relax"
+        ]
     }
 }
