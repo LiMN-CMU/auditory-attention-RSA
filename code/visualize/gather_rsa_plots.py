@@ -48,24 +48,23 @@ def run(config, sub_inds):
             img = load_image(in_dir / f'group_task-craa_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_rdm_{t:.1f}s.png')
             ax_rdm[i].imshow(img)
             ax_rdm[i].axis('off')
-            ax_rdm[i].set_title(f'{t * 1000:.0f} ms', fontsize=14)
+            ax_rdm[i].set_title(f'{t * 1000:.0f} ms', fontsize=20)
 
         # fig_rdm.subplots_adjust(top=0.85)
 
-        # Add large "Time" label
-        if feat_i == 2:
-            fig_rdm.suptitle('Alpha (8 - 14 Hz)', fontsize=16)
-        elif feat_i == 4:
-            fig_rdm.suptitle('Gamma (20 - 50 Hz)', fontsize=16)
-        elif feat_i == 0:
-            fig_rdm.suptitle('Delta (2 - 4 Hz)', fontsize=16) 
-        elif feat_i == 1:
-            fig_rdm.suptitle('Theta (4 - 8 Hz)', fontsize=16)    
-        elif feat_i == 3:
-            fig_rdm.suptitle('Beta (14 - 20 Hz)', fontsize=16)            
-        else:
-            print("Band name not specified")
-        fig_rdm.savefig(out_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_rdm_total.png', dpi=300)
+        # if feat_i == 2:
+        #     fig_rdm.suptitle('Alpha (8 - 14 Hz)', fontsize=16)
+        # elif feat_i == 0:
+        #     fig_rdm.suptitle('Gamma (20 - 50 Hz)', fontsize=16) 
+        # elif feat_i == 1:
+        #     fig_rdm.suptitle('Beta (14 - 20 Hz)', fontsize=16)    
+        # elif feat_i == 3:
+        #     fig_rdm.suptitle('Theta (4 - 8 Hz)', fontsize=16)            
+        # elif feat_i == 4:
+        #     fig_rdm.suptitle('Delta (2 - 4 Hz)', fontsize=16)
+        # elif feat_i == -1:
+        #     fig_rdm.suptitle('EEG Time Course', fontsize=16)
+        fig_rdm.savefig(out_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_rdm_total.png', dpi=300, transparent=True)
 
         # # model weight matrix
         # # 1) vertical
@@ -76,13 +75,13 @@ def run(config, sub_inds):
         #         img = load_image(fname)
         #         ax_model[row, col].imshow(img)
         #         ax_model[row, col].axis('off')
-        #         if row == 0:
-        #             ax_model[row, col].set_title(cat.replace("-", "\n"), fontsize=16)
+        #         # if row == 0:
+        #         #     ax_model[row, col].set_title(cat.replace("-", "\n"), fontsize=16)
 
         # # Add time tick labels on the left side
         # fig_model.subplots_adjust(left=0.15)
         # for pos, label in zip(tick_positions, target_times):
-        #     fig_model.text(0.11, pos, label, fontsize=16, va='center', ha='right')
+        #     fig_model.text(0.11, pos, label, fontsize=20, va='center', ha='right')
         
         # 2) horizontal
         fig_model, ax_model = plt.subplots(len(categories), len(target_times), figsize=(3.5 * len(target_times), 3.5 * len(categories)))
@@ -95,18 +94,22 @@ def run(config, sub_inds):
 
         for row, cat in enumerate(categories):
             for col, t in enumerate(target_times):
-                fname = in_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_weights_{t:.1f}s_category-{cat}.png'
+                fname = in_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_weights_{t:.1f}s_category-{cat}-masked.png'
                 img = load_image(fname)
                 ax_model[row][col].imshow(img)
                 ax_model[row][col].axis('off')
                 if row == 0:
-                    ax_model[row][col].set_title(f'{t * 1000:.0f} ms', fontsize=14)
+                    ax_model[row][col].set_title(f'{t * 1000:.0f} ms', fontsize=16)
             # Add category labels on the left side
             ax_model[row][0].set_ylabel(cat.replace("-", "\n"), fontsize=14, rotation=0, labelpad=40, va='center')
         fig_model.subplots_adjust(left=0.2, top=0.88)
 
-        fig_model.suptitle('Model Weights', fontsize=16)
-        fig_model.savefig(out_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_weights_total.png', dpi=500)
+        # fig_model.suptitle('Model Weights', fontsize=16)
+        fig_model.savefig(
+            out_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_weights_total-masked.png',
+            dpi=500,
+            transparent=False
+            )
 
 
 if __name__ == "__main__":
