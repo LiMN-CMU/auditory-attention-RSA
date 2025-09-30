@@ -142,7 +142,7 @@ def run(config, sub_inds):
 
             # Plot heatmap
             plt.figure(figsize=(8, 8))
-            sns.heatmap(target_rdm_spaced, cmap="viridis", square=True,
+            sns.heatmap(target_rdm_spaced, cmap="viridis", square=True, cbar=False,
                         vmin=acc_min, vmax=acc_max, xticklabels=False, yticklabels=False)
             # plt.title(f"PCM-based RDM at time {target_times[i]} sec")
             plt.tight_layout()
@@ -161,7 +161,17 @@ def run(config, sub_inds):
                 plt.figure(figsize=(8, 8))
                 weight_min = config_rsa[f"weight_boundary_{epoch_type}"][0]
                 weight_max = config_rsa[f"weight_boundary_{epoch_type}"][1]
-                evoked.plot_topomap(times=0, scalings=1, vlim=(weight_min, weight_max), time_format='', cmap='RdBu_r', size=3, show=True)
+                evoked.plot_topomap(
+                    times=0, 
+                    scalings=1, 
+                    vlim=(weight_min, weight_max),
+                    time_format='',
+                    # cmap='RdBu_r',
+                    size=3,
+                    # show=True,
+                    colorbar=False
+                )
+                
                 fig_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_conf-{config_id}_weights_{target_times[i]:.1f}s_category-{cat_name}"
                 # plt.title(fig_name)
                 plt.savefig(out_file.parent / f"{fig_name}.png", dpi=300)
