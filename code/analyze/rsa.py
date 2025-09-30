@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 import time
 from itertools import product
 import mne
+from datetime import datetime
 
 # Function to train SVM and extract weights and accuracy
 def train_model_permutation(X, y, model_type, test_idx, regularization_param=1):
@@ -56,6 +57,7 @@ def run(config, sub_i):
     config_rsa = config["rsa"]
     in_dir = base_dir / config_rsa["input_folder"]
     out_dir = base_dir / config_rsa["output_folder"]
+    config_i = config["configuration_id"]
     
     fs = config_rsa["sampling_rate"]
     window_ms = config_rsa["target_time_window_ms"]  # ms window
@@ -109,6 +111,15 @@ def run(config, sub_i):
         )
         out_file = bids_out.fpath
         out_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # save config as json file within the output folder
+        current_time = datetime.now()
+        timestamp_str = current_time.strftime("%Y%m%d%H%M%S")
+        config_folder = out_file.parent / "config"
+        config_folder.mkdir(parents=True, exist_ok=True)
+        config_fpath = config_folder / f"config-{config_i}_time-{timestamp_str}.json"
+        with open(config_fpath, "w") as f:
+            json.dump(config, f)
 
         n_cond, n_trial, n_chan, n_feat, n_time = power.shape
         time_vec = np.linspace(epoch_boundary[0], epoch_boundary[1], n_time)
@@ -117,13 +128,18 @@ def run(config, sub_i):
         test_indices = list(product(range(n_trial), range(n_trial, 2 * n_trial)))
         
         target_times = config_rsa[f"target_time_{epoch_type}"]
-        target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in target_times]
-        time_indices = []
-        for target_time_idx in target_time_indices:
-            window_start = max(0, target_time_idx - window_samples // 2)
-            window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
-            time_indices.append(np.arange(window_start, window_end))
-        time_indices = np.concatenate(time_indices)
+        if isinstance(target_times, str) and target_times.lower() == "all":
+            # Select every timepoint
+            time_indices = np.arange(n_time)
+        else:
+            # Select specific target times
+            target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in target_times]
+            time_indices = []
+            for target_time_idx in target_time_indices:
+                window_start = max(0, target_time_idx - window_samples // 2)
+                window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
+                time_indices.append(np.arange(window_start, window_end))
+            time_indices = np.concatenate(time_indices)
 
         # Storage for weights and accuracy across permutations
         all_weights = np.zeros((n_time, n_cond, n_cond, n_chan))
@@ -165,19 +181,19 @@ def run(config, sub_i):
                     all_rdms[time_idx, cond2, cond1] = mean_acc  # symmetric
                     
                     (out_file.parent / "model-cross-validation").mkdir(parents=True, exist_ok=True)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_time-{time_idx}_weights.npy", weights)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_time-{time_idx}_logits.npy", logits)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_time-{time_idx}_accuracies.npy", accuracies)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_time-{time_idx}_weights.npy", weights)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_time-{time_idx}_logits.npy", logits)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_time-{time_idx}_accuracies.npy", accuracies)
 
             process_time = time.time() - start_time
             print(f"Time taken: {process_time:.2f}s")
 
         # Save RDM
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_target-time-only_rdm.npy", all_rdms)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_target-time-only_rdm.npy", all_rdms)
 
         # Save Weights & Accuracy
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_target-time-only_weights.npy", all_weights)
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_target-time-only_logits.npy", all_logits)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_target-time-only_weights.npy", all_weights)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_target-time-only_logits.npy", all_logits)
 
     print(f"\nAll RDMs, weights, and accuracies saved for subject {sub_str}!\n")
     
