@@ -33,7 +33,7 @@ def train_model_permutation(X, y, model_type, test_idx, regularization_param=1):
         model = LinearSVC(C=regularization_param)
         model.fit(X_train, y_train)
         weights = model.coef_.flatten()
-        logit = model.decision_function(X_test)[0]  # distance from decision threshold
+        logit = model.decision_function(X_test)  # distance from decision threshold
         acc = model.score(X_test, y_test) 
 
     elif model_type == "logistic_regression":
@@ -82,11 +82,11 @@ def run(config, sub_i):
         )
         in_file = bids_in.fpath
         if config_rsa["input_folder"].startswith("derivatives/cwt"):
-            power = np.load(in_file.with_suffix(".npy"))  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
+            power = np.load(in_file.with_suffix(".npy"), allow_pickle=True)  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
             print(f"\n=== Processing frequency band #{feat_idx} ===")
         elif config_rsa["input_folder"].startswith("derivatives/epoch"): 
             epochs = mne.read_epochs(in_file, preload=True)
-            eeg_amp = epochs._data  # (n_cond * n_tial, n_chan, n_time)
+            eeg_amp = epochs._data  # (n_cond * n_trial, n_chan, n_time)
             
             label_fpath = in_file.parent / (in_file.stem.split("_desc")[0] + '_conditions.npy')
             condition_labels = np.load(label_fpath)
@@ -94,9 +94,10 @@ def run(config, sub_i):
             power = []
             for cond_i in conds:
                 condition_amp = eeg_amp[condition_labels == cond_i]  # Select trials for condition
+                condition_amp = condition_amp[:, :, np.newaxis, :]
                 power.append(condition_amp)
-            power = np.stack(power, axis=0)  
-            power = power[:, :, :, np.newaxis, :]  # (n_cond, n_trial, n_chan, 1, n_time)
+            # power = np.stack(power, axis=0)  
+            # power = power[:, :, :, np.newaxis, :]  # (n_cond, n_trial, n_chan, 1, n_time)
             print(f"\n=== Processing EEG amplitude ===")
         else:
             raise Exception("Input folder should be either cwt or epoch")
@@ -121,11 +122,10 @@ def run(config, sub_i):
         with open(config_fpath, "w") as f:
             json.dump(config, f)
 
-        n_cond, n_trial, n_chan, n_feat, n_time = power.shape
+        # n_cond, n_trial, n_chan, n_feat, n_time = power.shape
+        n_cond = len(power)
+        _, n_chan, n_feat, n_time = power[0].shape
         time_vec = np.linspace(epoch_boundary[0], epoch_boundary[1], n_time)
-        
-        # Generate reproducible test indices
-        test_indices = list(product(range(n_trial), range(n_trial, 2 * n_trial)))
         
         target_times = config_rsa[f"target_time_{epoch_type}"]
         if isinstance(target_times, str) and target_times.lower() == "all":
@@ -146,17 +146,24 @@ def run(config, sub_i):
         all_logits = np.zeros((n_time, n_cond, n_cond))
         all_rdms = np.zeros((n_time, n_cond, n_cond))
 
-        # Loop over features
-        # for feat_idx in range(n_feat):
+        # Loop over time points
         for time_idx in time_indices:
             start_time = time.time()
             for cond1 in range(n_cond):
                 for cond2 in range(cond1 + 1, n_cond):
-                    trials1 = power[cond1, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
-                    trials2 = power[cond2, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    # trials1 = power[cond1, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    trials1 = power[cond1][:, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    n_trial1 = trials1.shape[0]
+
+                    # trials2 = power[cond2, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    trials2 = power[cond2][:, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    n_trial2 = trials2.shape[0]
 
                     X = np.vstack((trials1, trials2))
-                    y = np.array([1] * n_trial + [0] * n_trial)  # cond1: positive weight, cond2: negative weight
+                    y = np.array([1] * n_trial1 + [0] * n_trial2)  # cond1: positive weight, cond2: negative weight
+                    
+                    # Generate reproducible test indices
+                    test_indices = list(product(range(n_trial1), range(n_trial1, n_trial1 + n_trial2)))
                     
                     # Parallel training (n_perm)
                     model_results = Parallel(n_jobs=-1)(
@@ -169,7 +176,7 @@ def run(config, sub_i):
                     # Extract weights and accuracies
                     weights, logits, accuracies = zip(*model_results)
                     weights = np.array(weights)  # Shape: (n_perm, n_chan)
-                    logits = np.array(logits)  # Shape: (n_perm, n_chan)
+                    logits = np.array(logits)  # Shape: (n_perm,)
                     accuracies = np.array(accuracies)  # Shape: (n_perm,)
 
                     # Compute mean accuracy for RDM
@@ -181,19 +188,19 @@ def run(config, sub_i):
                     all_rdms[time_idx, cond2, cond1] = mean_acc  # symmetric
                     
                     (out_file.parent / "model-cross-validation").mkdir(parents=True, exist_ok=True)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_time-{time_idx}_weights.npy", weights)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_time-{time_idx}_logits.npy", logits)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_time-{time_idx}_accuracies.npy", accuracies)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_weights.npy", weights)  # TODO: ERROR-I HAVE TO SAVE COND1 and COND2
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_logits.npy", logits)
+                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_accuracies.npy", accuracies)
 
             process_time = time.time() - start_time
             print(f"Time taken: {process_time:.2f}s")
 
         # Save RDM
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_target-time-only_rdm.npy", all_rdms)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_target-time-only_rdm.npy", all_rdms)
 
         # Save Weights & Accuracy
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_target-time-only_weights.npy", all_weights)
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_target-time-only_logits.npy", all_logits)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_target-time-only_weights.npy", all_weights)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_target-time-only_logits.npy", all_logits)
 
     print(f"\nAll RDMs, weights, and accuracies saved for subject {sub_str}!\n")
     
@@ -207,5 +214,6 @@ if __name__ == "__main__":
     config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
     with open(config_path, "r") as f:
         config = json.load(f)
+    print(config)
     for sub_i in config["subjects"]:
         run(config, sub_i)

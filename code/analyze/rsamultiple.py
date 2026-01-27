@@ -11,6 +11,7 @@ from joblib import Parallel, delayed
 from sklearn.preprocessing import StandardScaler
 import time
 from itertools import product
+from datetime import datetime
 import mne
 
 # Function to train SVM and extract weights and accuracy
@@ -138,13 +139,18 @@ def run(config, sub_i):
         test_indices = list(product(range(n_trial), range(n_trial, 2 * n_trial)))
         
         target_times = config_rsa[f"target_time_{epoch_type}"]
-        target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in target_times]
-        time_indices = []
-        for target_time_idx in target_time_indices:
-            window_start = max(0, target_time_idx - window_samples // 2)
-            window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
-            time_indices.append(np.arange(window_start, window_end))
-        time_indices = np.concatenate(time_indices)
+        if isinstance(target_times, str) and target_times.lower() == "all":
+            # Select every timepoint
+            time_indices = np.arange(n_time)
+        else:
+            # Select specific target times
+            target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in target_times]
+            time_indices = []
+            for target_time_idx in target_time_indices:
+                window_start = max(0, target_time_idx - window_samples // 2)
+                window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
+                time_indices.append(np.arange(window_start, window_end))
+            time_indices = np.concatenate(time_indices)
 
         # Storage for weights and accuracy across permutations
         all_weights = np.zeros((n_time, n_cond, n_cond, n_chan))
