@@ -77,6 +77,7 @@ def run(config, sub_inds):
     feat_i = config_rsa["frequency_band_index"]
     breaks = config_rsa["rdm_plot_spacing_boundary"]  # where to insert spacing between groups
     category_num_dict = config_rsa["category_number_dictionary"]
+    analysis_config_id = config_rsa["analysis-config-id"]
     
     montage_p = base_dir / "etc"
     with open(montage_p / "channel_dict_ABC.json", "r") as f:
@@ -107,10 +108,8 @@ def run(config, sub_inds):
                 description=epoch_type
             )
             in_file = bids_in.fpath
-            rdms = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_model-{model_type}_target-time-only_rdm.npy")
-            # rdms = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_target-time-only_rdm.npy")
-            svm_weights = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_model-{model_type}_target-time-only_weights.npy")
-            # svm_weights = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_target-time-only_svm-weights.npy")
+            rdms = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_model-{model_type}_config-{analysis_config_id}_target-time-only_rdm.npy")
+            svm_weights = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_model-{model_type}_config-{analysis_config_id}_target-time-only_weights.npy")
             print(rdms.shape)
             print(svm_weights.shape)
             all_rdms.append(rdms)
