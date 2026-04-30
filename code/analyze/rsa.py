@@ -13,12 +13,46 @@ import time
 from itertools import product
 import mne
 from datetime import datetime
+import pickle
 
-# Function to train SVM and extract weights and accuracy
-def train_model_permutation(X, y, model_type, test_idx, regularization_param=1):
+def haufe_transform(X, W, eps=1e-12):
     """
-    Train a model (SVM or linear regression) on X, y with specified test_idx.
-    Returns: weights and accuracy (for SVM) or R² (for regression).
+    Compute Haufe patterns from linear decoder weights.
+
+    Parameters
+    ----------
+    X: (n_samples, n_features) in SAME space as w (e.g., scaled)
+    w: (n_features,)
+    ----------
+    returns a: (n_features,)
+    """
+
+    # Center data
+    Xc = X - X.mean(axis=0, keepdims=True)
+    s = Xc @ W
+
+    # Covariances
+    Sigma_x = (Xc.T @ Xc) / (Xc.shape[0] - 1)
+    var_s = float(np.var(s, ddof=1))
+    inv_var_s = 1.0 / max(var_s, eps)
+
+    # Haufe transform
+    A = (Sigma_x @ W) * inv_var_s
+
+    return A
+
+def train_model_permutation(
+        X, y, model_type, test_idx, 
+        regularization_param=1, positive_label=1, 
+        apply_direction_fix=True, apply_haufe_transform=True
+    ):
+    """
+    Train a model on X, y with specified test_idx (leave-one-out style).
+    Returns: weights, bias, decision values (logits), accuracy.
+    
+    Direction fix:
+      Ensures mean decision value for `positive_label` on TRAIN set is larger than the other class.
+      If not, flips (w, b) -> (-w, -b). This does NOT change predictions if you also flip decision values accordingly.
     """
     X_train = np.delete(X, test_idx, axis=0)
     y_train = np.delete(y, test_idx)
@@ -32,24 +66,63 @@ def train_model_permutation(X, y, model_type, test_idx, regularization_param=1):
     if model_type == "svm":
         model = LinearSVC(C=regularization_param)
         model.fit(X_train, y_train)
-        weights = model.coef_.flatten()
-        logit = model.decision_function(X_test)  # distance from decision threshold
-        acc = model.score(X_test, y_test) 
+        w = model.coef_.ravel().copy()
+        b = float(model.intercept_.ravel()[0])
+
+        # decision values
+        d_train = model.decision_function(X_train)
+        d_test  = model.decision_function(X_test)
+
+        acc = model.score(X_test, y_test)
 
     elif model_type == "logistic_regression":
         model = LogisticRegression(penalty='l2', C=1 / regularization_param, solver="liblinear")
         model.fit(X_train, y_train)
-        weights = model.coef_.flatten()
-        logit = model.decision_function(X_test)[0]  # raw logit value. sigmoid(logit) = probability
+        w = model.coef_.ravel().copy()
+        b = float(model.intercept_.ravel()[0])
+
+        d_train = model.decision_function(X_train)  # raw logit
+        d_test  = model.decision_function(X_test)
+
         y_pred = model.predict(X_test)
-        acc = np.mean(y_pred == y_test) 
+        acc = float(np.mean(y_pred == y_test))
 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
+    
+    # Direction fix 
+    flipped = False
+    if apply_direction_fix:
+        classes = np.unique(y_train)
+        if len(classes) != 2:
+            raise ValueError("Direction fix assumes binary labels.")
 
-    return weights, logit, acc
+        if positive_label not in classes:
+            raise ValueError(f"positive_label={positive_label} not present in y_train classes={classes}")
 
-# Parameters
+        other_label = classes[0] if classes[1] == positive_label else classes[1]
+
+        mu_pos = float(d_train[y_train == positive_label].mean())
+        mu_other = float(d_train[y_train == other_label].mean())
+        
+        delta = mu_pos - mu_other
+
+        # Want mu_pos > mu_other. If not, flip everything.
+        if mu_pos < mu_other:
+            flipped = True
+            w *= -1.0
+            b *= -1.0
+            d_train *= -1.0
+            d_test  *= -1.0
+            acc = 1.0 - acc
+    
+    # Haufe pattern (use TRAIN data, scaled)
+    haufe_w = None
+    if apply_haufe_transform:
+        haufe_w = haufe_transform(X_train, w)
+
+    return w, haufe_w, b, d_test, acc, flipped
+
 def run(config, sub_i):
     task = config["task"]
 
@@ -62,9 +135,11 @@ def run(config, sub_i):
     fs = config_rsa["sampling_rate"]
     window_ms = config_rsa["target_time_window_ms"]  # ms window
     window_samples = int((window_ms / 1000) * fs)  # Convert ms to samples
-    feat_idx = config_rsa["frequency_band_index"]
+    feat_indices = config_rsa["frequency_band_indices"]
     model_type = config_rsa["decoder_model"]
     model_regularization_parameter = config_rsa["model_regularization_parameter"]
+    apply_haufe_transform = bool(config_rsa["apply_haufe_transform"])
+    apply_direction_fix = bool(config_rsa["apply_direction_fix"])
 
     sub_str = f"sub-{sub_i:03d}"
     print(f"\n=== Processing subject: {sub_str} ===")
@@ -72,35 +147,45 @@ def run(config, sub_i):
     epoch_type_dict = {'cue': config_rsa["epoch_boundary_cue"], 'target': config_rsa["epoch_boundary_target"]}
     for epoch_type, epoch_boundary in epoch_type_dict.items():
         print(f"=== Processing {epoch_type} epochs ===")
-        bids_in = BIDSPath(
-            subject=sub_str.split('-')[1],
-            task=task,
-            processing=in_dir.name,
-            datatype="eeg",
-            root=in_dir,
-            description=epoch_type
-        )
-        in_file = bids_in.fpath
-        if config_rsa["input_folder"].startswith("derivatives/cwt"):
-            power = np.load(in_file.with_suffix(".npy"), allow_pickle=True)  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
-            print(f"\n=== Processing frequency band #{feat_idx} ===")
-        elif config_rsa["input_folder"].startswith("derivatives/epoch"): 
-            epochs = mne.read_epochs(in_file, preload=True)
-            eeg_amp = epochs._data  # (n_cond * n_trial, n_chan, n_time)
-            
-            label_fpath = in_file.parent / (in_file.stem.split("_desc")[0] + '_conditions.npy')
-            condition_labels = np.load(label_fpath)
-            conds = range(1, config_rsa["num_condition"] + 1)
-            power = []
-            for cond_i in conds:
-                condition_amp = eeg_amp[condition_labels == cond_i]  # Select trials for condition
-                condition_amp = condition_amp[:, :, np.newaxis, :]
-                power.append(condition_amp)
-            # power = np.stack(power, axis=0)  
-            # power = power[:, :, :, np.newaxis, :]  # (n_cond, n_trial, n_chan, 1, n_time)
-            print(f"\n=== Processing EEG amplitude ===")
-        else:
-            raise Exception("Input folder should be either cwt or epoch")
+        features = []
+        for feat_idx in feat_indices:
+            # set the input folder
+            if feat_idx == -1:  # epoch folder
+                in_feat_dir = in_dir / "epoch"
+            else:
+                in_feat_dir = in_dir / "cwt"
+                
+            bids_in = BIDSPath(
+                subject=sub_str.split('-')[1],
+                task=task,
+                processing=in_feat_dir.name,
+                datatype="eeg",
+                root=in_feat_dir,
+                description=epoch_type
+            )
+            in_file = bids_in.fpath
+            if feat_idx == -1:  # epoch folder
+                print(f"\n=== Processing EEG amplitude ===")
+                epochs = mne.read_epochs(in_file, preload=True)
+                eeg_amp = epochs.get_data()  # (n_cond * n_trial, n_chan, n_time)
+                
+                label_fpath = in_file.parent / (in_file.stem.split("_desc")[0] + '_conditions.npy')
+                condition_labels = np.load(label_fpath)
+                conds = range(1, config_rsa["num_condition"] + 1)
+                feat_erp = []
+                for cond_i in conds:
+                    condition_amp = eeg_amp[condition_labels == cond_i]  # Select trials for condition
+                    condition_amp = condition_amp[:, :, :]
+                    feat_erp.append(condition_amp)
+                features.append(feat_erp)
+            else:
+                print(f"\n=== Processing frequency band #{feat_idx} ===")
+                feat_full = np.load(in_file.with_suffix(".npy"), allow_pickle=True)  # Shape: (n_cond, n_trial, n_chan, n_feat, n_time)
+                feat_band = []
+                for cond_i in range(len(feat_full)):
+                    feat_cond = feat_full[cond_i][:, :, feat_idx, :]
+                    feat_band.append(feat_cond)
+                features.append(feat_band)
         
         bids_out = BIDSPath(
             subject=sub_str.split('-')[1],
@@ -122,9 +207,24 @@ def run(config, sub_i):
         with open(config_fpath, "w") as f:
             json.dump(config, f)
 
-        # n_cond, n_trial, n_chan, n_feat, n_time = power.shape
-        n_cond = len(power)
-        _, n_chan, n_feat, n_time = power[0].shape
+        n_cond = config_rsa["num_condition"]
+        if len(features) == 2:  # if multiple features:
+            feat1, feat2 = features
+            input_feature = []
+            for c in range(n_cond):
+                a = feat1[c]
+                b = feat2[c]
+
+                # basic checks: must match all dims except channel axis
+                if a.ndim != b.ndim:
+                    raise ValueError(f"cond {c}: ndim mismatch {a.ndim} vs {b.ndim}")
+
+                input_feature.append(np.concatenate([a, b], axis=1))
+        elif len(features) == 1:
+            input_feature = features[0]
+        else:
+            raise Exception("The len(features) should be either 1 or 2")
+        _, n_chan, n_time = input_feature[0].shape
         time_vec = np.linspace(epoch_boundary[0], epoch_boundary[1], n_time)
         
         target_times = config_rsa[f"target_time_{epoch_type}"]
@@ -142,21 +242,20 @@ def run(config, sub_i):
             time_indices = np.concatenate(time_indices)
 
         # Storage for weights and accuracy across permutations
-        all_weights = np.zeros((n_time, n_cond, n_cond, n_chan))
-        all_logits = np.zeros((n_time, n_cond, n_cond))
+        all_weights_raw = np.zeros((n_time, n_cond, n_cond, n_chan))
+        all_weights_haufe = np.zeros((n_time, n_cond, n_cond, n_chan))
         all_rdms = np.zeros((n_time, n_cond, n_cond))
 
         # Loop over time points
         for time_idx in time_indices:
             start_time = time.time()
+            # cv_raw = {}  # key: (cond1, cond2) -> dict of arrays + metadata
             for cond1 in range(n_cond):
                 for cond2 in range(cond1 + 1, n_cond):
-                    # trials1 = power[cond1, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
-                    trials1 = power[cond1][:, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    trials1 = input_feature[cond1][:, :, time_idx]  # Shape: (n_trial, n_chan)
                     n_trial1 = trials1.shape[0]
 
-                    # trials2 = power[cond2, :, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
-                    trials2 = power[cond2][:, :, feat_idx, time_idx]  # Shape: (n_trial, n_chan)
+                    trials2 = input_feature[cond2][:, :, time_idx]  # Shape: (n_trial, n_chan)
                     n_trial2 = trials2.shape[0]
 
                     X = np.vstack((trials1, trials2))
@@ -164,50 +263,69 @@ def run(config, sub_i):
                     
                     # Generate reproducible test indices
                     test_indices = list(product(range(n_trial1), range(n_trial1, n_trial1 + n_trial2)))
-                    
                     # Parallel training (n_perm)
                     model_results = Parallel(n_jobs=-1)(
                         delayed(train_model_permutation)(
-                            X, y, model_type, 
-                            regularization_param=model_regularization_parameter, 
-                            test_idx=list(test_indices[perm_i])) for perm_i in range(len(test_indices))
+                            X, y, model_type,
+                            test_idx=list(test_indices[perm_i]),
+                            regularization_param=model_regularization_parameter,
+                            apply_direction_fix=apply_direction_fix,
+                            apply_haufe_transform=apply_haufe_transform,
+                        )
+                        for perm_i in range(len(test_indices))
                     )
-
                     # Extract weights and accuracies
-                    weights, logits, accuracies = zip(*model_results)
-                    weights = np.array(weights)  # Shape: (n_perm, n_chan)
-                    logits = np.array(logits)  # Shape: (n_perm,)
+                    weights_raw, weights_haufe, bias, test_logits, accuracies, sign_flipped = zip(*model_results)
+                    weights_haufe = np.array(weights_haufe)  # Shape: (n_perm, n_chan)
                     accuracies = np.array(accuracies)  # Shape: (n_perm,)
+                    weights_raw = np.array(weights_raw)  # Shape: (n_perm, n_chan)
+                    bias = np.array(bias)  # Shape: (n_perm,)
+                    test_logits = np.array(test_logits)  # Shape: (n_perm, n_test_labels)
+                    sign_flipped = np.array(sign_flipped)
+                    if sum(sign_flipped) > 0:
+                        print(f"[WARNING] Sign flip detected: {sum(sign_flipped)}")
 
-                    # Compute mean accuracy for RDM
-                    # Store weights and accuracies
-                    all_weights[time_idx, cond1, cond2, :] = np.mean(weights, axis=0)
-                    all_logits[time_idx, cond1, cond2] = np.mean(logits, axis=0)
-                    mean_acc = np.mean(accuracies)
-                    all_rdms[time_idx, cond1, cond2] = mean_acc
-                    all_rdms[time_idx, cond2, cond1] = mean_acc  # symmetric
+                    # stack cls data
+                    all_weights_raw[time_idx, cond1, cond2, :] = weights_raw.mean(axis=0)
+                    # symmetric
+                    all_weights_raw[time_idx, cond2, cond1, :] = all_weights_raw[time_idx, cond1, cond2, :]
+                    all_rdms[time_idx, cond1, cond2] = accuracies.mean()
+                    all_rdms[time_idx, cond2, cond1] = all_rdms[time_idx, cond1, cond2]
                     
-                    (out_file.parent / "model-cross-validation").mkdir(parents=True, exist_ok=True)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_weights.npy", weights)  # TODO: ERROR-I HAVE TO SAVE COND1 and COND2
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_logits.npy", logits)
-                    np.save(out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_accuracies.npy", accuracies)
+                    if apply_haufe_transform:
+                        all_weights_haufe[time_idx, cond1, cond2, :] = weights_haufe.mean(axis=0)
+                        all_weights_haufe[time_idx, cond2, cond1, :] = all_weights_haufe[time_idx, cond1, cond2, :]
+            #         d = {
+            #             "weights_raw":   np.asarray(weights_raw),     # (n_perm_local, n_chan)
+            #             "weights_haufe": np.asarray(weights_haufe),   # (n_perm_local, n_chan)
+            #             "bias":          np.asarray(bias),            # (n_perm_local,)
+            #             "logits":        np.asarray(test_logits),     # (n_perm_local, 2)
+            #             "acc":           np.asarray(accuracies),      # (n_perm_local,)
+            #             "sign_flipped":  np.asarray(sign_flipped),    # (n_perm_local,)
+            #             "n_trial1": n_trial1,
+            #             "n_trial2": n_trial2,
+            #             "time_idx": time_idx
+            #         }
+            #         cv_raw[(cond1, cond2)] = d
 
+            # (out_file.parent / "model-cross-validation").mkdir(parents=True, exist_ok=True)
+            # cv_path = (out_file.parent / "model-cross-validation" / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_time-{time_idx}_results.pkl")
+            # with open(cv_path, "wb") as f:
+            #     pickle.dump(cv_raw, f)
             process_time = time.time() - start_time
             print(f"Time taken: {process_time:.2f}s")
 
-        # Save RDM
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_target-time-only_rdm.npy", all_rdms)
-
-        # Save Weights & Accuracy
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_target-time-only_weights.npy", all_weights)
-        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_idx}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_target-time-only_logits.npy", all_logits)
-
+        # Save RDM & Weights
+        feat_str = "-".join(map(str, feat_indices))
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_str}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_rdm.npy", all_rdms)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_str}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_weights.npy", all_weights_raw)
+        np.save(out_file.parent / f"{out_file.stem}_feat-{feat_str}_model-{model_type}_config-{config_i}_alpha-{model_regularization_parameter}_haufeweights.npy", all_weights_haufe)
     print(f"\nAll RDMs, weights, and accuracies saved for subject {sub_str}!\n")
     
 if __name__ == "__main__":
     # Load config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="analysis-001", help="Configuration ID")
+    parser.add_argument("-c", "--config_id", type=str, default="analysis-001", help="Configuration ID")
     args = parser.parse_args()
     config_id = args.config_id
 
