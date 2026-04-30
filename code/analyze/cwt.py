@@ -1,3 +1,5 @@
+import argparse
+import json
 from pathlib import Path
 import mne
 from mne_bids import BIDSPath
@@ -95,10 +97,23 @@ def run(config, sub_i):
             print(band_amplitude.shape)
             del condition_power, band_amplitude
 
-        final_band_amplitude = np.stack(final_band_amplitude, axis=0)  # Shape: (condition, trial, channel, band, time)
-        print(final_band_amplitude.shape)
-        
-        np.save(out_fpath.with_suffix(".npy"), final_band_amplitude)
+        if sub_i == 3:
+            np.save(out_fpath.with_suffix(".npy"), np.array(final_band_amplitude, dtype=object), allow_pickle=True)
+        else:
+            final_band_amplitude = np.stack(final_band_amplitude, axis=0)  # Shape: (condition, trial, channel, band, time)
+            print(final_band_amplitude.shape)
+            np.save(out_fpath.with_suffix(".npy"), final_band_amplitude)
         print(f"Saved final band amplitude data")
         del final_band_amplitude, power_data, power, epochs
-        
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_id", type=str, default="analysis-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)
