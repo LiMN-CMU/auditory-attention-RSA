@@ -133,7 +133,7 @@ def run(config, sub_inds):
 if __name__ == "__main__":
     # Load config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="visualize-001", help="Configuration ID")
+    parser.add_argument("-c", "--config_id", type=str, default="visualize-001", help="Configuration ID")
     args = parser.parse_args()
     config_id = args.config_id
 
