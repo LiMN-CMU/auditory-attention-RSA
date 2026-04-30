@@ -1,7 +1,7 @@
 {
     "mode": "auto",
-    "configuration_id": 3,
-    "description": "sub category weight map",
+    "configuration_id": 5,
+    "description": "accuarcy noise floor 0.5 + lambda tuning visulization",
     "subjects": [
         2,
         3,
@@ -37,12 +37,11 @@
     "task": "craa",
     "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
     "visualize_rsa": {
-        "input_folder": "derivatives/rsa",
-        "output_folder": "derivatives/visualizersa",
+        "input_folder": "derivatives/rsalambdatuning",
+        "output_folder": "derivatives/visualizersalambda",
+        "original_data_folder": "derivatives/cwt",
         "decoder_model": "svm",
-        "analysis-config-id": 1,
-        "frequency_band_index": -1,
-        "model_regularization_parameter": 0.00001,
+        "analysis-config-id": 7,
         "epoch_boundary_cue": [
             -1.2,
             1.1
@@ -53,22 +52,16 @@
         ],
         "sampling_rate": 512,
         "target_time_window_ms": 30,
-        "target_time_cue": "all",
-        "target_time_target": "all",
+        "target_time_cue": [
+            0.25
+        ],
+        "target_time_target": [
+            0.4
+        ],
         "plot_target_time_cue": [
-            -1.1,
-            -0.5,
-            0,
-            0.15,
-            0.25,
-            1
+            0.25
         ],
         "plot_target_time_target": [
-            -0.2,
-            -0.1,
-            0,
-            0.15,
-            0.3,
             0.4
         ],
         "rdm_accuracy_boundary_cue": [
@@ -92,34 +85,28 @@
             15
         ],
         "similarity_index_boundary_cue": [
-            0,
-            0.04
+            0, 0.04
         ],
         "similarity_index_boundary_target": [
-            0,
-            0.06
+            0, 0.06
         ],
         "category_number_dictionary": {
-            "spaceLeft": 4,
-            "spaceRight": 4,
-            "talkerMale": 3,
-            "talkerFemale": 3,
+            "space": 8,
+            "talker": 6,
             "relax": 7
         },
         "auditory_attention_categories": [
-            "spaceLeft-spaceRight",
-            "spaceLeft-talkerMale",
-            "spaceLeft-talkerFemale",
-            "spaceLeft-relax",
-            "spaceRight-talkerMale",
-            "spaceRight-talkerFemale",
-            "spaceRight-relax",
-            "talkerMale-talkerFemale",
-            "talkerMale-relax",
-            "talkerFemale-relax"
+            "space-space",
+            "talker-talker",
+            "relax-relax",
+            "space-relax",
+            "space-talker",
+            "talker-relax"
         ],
         "significance_alpha": 0.05,
         "significance_n_permutation": 1000,
-        "significance_n_bonferroni_correction": 6
+        "significance_n_bonferroni_correction": 6,
+        "frequency_band_index": -1,
+        "model_regularization_parameter": 0.00001
     }
 }

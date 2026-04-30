@@ -1,0 +1,93 @@
+{
+    "mode": "auto",
+    "configuration_id": 7,
+    "description": "RSA for lambda tuning",
+    "subjects": [
+        28,
+        29,
+        30,
+        32,
+        33,
+        34
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "cwt": {
+        "input_folder": "derivatives/epoch",
+        "output_folder": "derivatives/cwt",
+        "num_condition": 21,
+        "num_frequency_bin": 96,
+        "frequency_boundary": [
+            50,
+            30,
+            14,
+            8,
+            4,
+            2
+        ],
+        "scale_spacing_DJ": 0.05
+    },
+    "lambda_tuning": {
+        "input_folder": "derivatives/cwt",
+        "output_folder": "derivatives/lambda",
+        "n_fold": 10,
+        "lambda_search_space": [
+            1e-07,
+            1e-06,
+            1e-05,
+            0.0001,
+            0.001,
+            0.01,
+            0.1,
+            1,
+            10
+        ],
+        "frequency_band_index": 2,
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "target_time_window_ms": 30,
+        "target_time_cue": [
+            0.25
+        ],
+        "target_time_target": [
+            0.4
+        ],
+        "condition_subsamples": [
+            3,
+            12,
+            17
+        ],
+        "sampling_rate": 512,
+        "decoder_model": "svm"
+    },
+    "rsa": {
+        "input_folder": "derivatives/epoch",
+        "output_folder": "derivatives/rsalambdatuning",
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "num_condition": 21,
+        "sampling_rate": 512,
+        "target_time_window_ms": 30,
+        "target_time_cue": [
+            0.25
+        ],
+        "target_time_target": [
+            0.4
+        ],
+        "frequency_band_index": -1,
+        "decoder_model": "svm",
+        "model_regularization_parameter": 0.00001
+    }
+}

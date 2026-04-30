@@ -1,0 +1,111 @@
+{
+    "mode": "auto",
+    "configuration_id": 9,
+    "description": "high vs low performance boxplot",
+    "subjects_low": [
+        18,
+        22,
+        2,
+        9,
+        11,
+        14,
+        27,
+        20,
+        16,
+        34,
+        15,
+        30,
+        29,
+        19,
+        17
+    ],
+    "subjects_high": [
+        26,
+        8,
+        33,
+        24,
+        23,
+        13,
+        4,
+        28,
+        10,
+        21,
+        25,
+        32,
+        3,
+        6,
+        5
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "compare_performance": {
+        "input_folder": "derivatives/rsa",
+        "output_folder": "derivatives/visualizersa",
+        "decoder_model": "svm",
+        "analysis-config-id": 8,
+        "frequency_band_index": 2,
+        "num_condition": 21,
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "plot_epoch_boundary_cue": [
+            -1.15,
+            1.05
+        ],
+        "plot_epoch_boundary_target": [
+            -0.4,
+            0.7
+        ],
+        "sampling_rate": 512,
+        "time_of_interest_cue": [
+            0.7,
+            0.9
+        ],
+        "time_of_interest_target": [
+            0.1,
+            0.3
+        ],
+        "weight_boundary_cue": [
+            -0.1,
+            0.1
+        ],
+        "weight_boundary_target": [
+            -0.1,
+            0.1
+        ],
+        "similarity_index_boundary_cue": [
+            -0.01,
+            0.06
+        ],
+        "similarity_index_boundary_target": [
+            -0.01,
+            0.12
+        ],
+        "attention_passive_category_number_dictionary": {
+            "attention": 14,
+            "passive": 7
+        },
+        "category_number_dictionary": {
+            "space": 8,
+            "talker": 6,
+            "relax": 7
+        },
+        "categories_to_remove": [
+            "space-relax",
+            "talker-relax",
+            "relax-relax"
+        ],
+        "categories_of_interest": [
+            "attention-passive",
+            "space-talker"
+        ],
+        "significance_alpha": 0.05,
+        "significance_n_permutation": 1000,
+        "significance_cluster_threshold_p_value": 0.05
+    }
+}

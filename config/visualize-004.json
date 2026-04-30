@@ -1,7 +1,7 @@
 {
     "mode": "auto",
-    "configuration_id": 3,
-    "description": "sub category weight map",
+    "configuration_id": 4,
+    "description": "accuarcy noise floor 0.5, multiple freqs",
     "subjects": [
         2,
         3,
@@ -37,12 +37,16 @@
     "task": "craa",
     "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
     "visualize_rsa": {
-        "input_folder": "derivatives/rsa",
-        "output_folder": "derivatives/visualizersa",
+        "input_folder_single": "derivatives/rsa",
+        "input_folder_multiple": "derivatives/rsamultiple",
+        "output_folder": "derivatives/visualizersaonly",
+        "single_feature_analysis_config_id": 8,
+        "dual_feature_analysis_config_id": 8,
+        "frequency_band_indices": [
+            2,
+            -1
+        ],
         "decoder_model": "svm",
-        "analysis-config-id": 1,
-        "frequency_band_index": -1,
-        "model_regularization_parameter": 0.00001,
         "epoch_boundary_cue": [
             -1.2,
             1.1
@@ -50,6 +54,14 @@
         "epoch_boundary_target": [
             -0.4,
             1.1
+        ],
+        "plot_epoch_boundary_cue": [
+            -1.15,
+            1.05
+        ],
+        "plot_epoch_boundary_target": [
+            -0.4,
+            0.7
         ],
         "sampling_rate": 512,
         "target_time_window_ms": 30,
@@ -60,32 +72,22 @@
             -0.5,
             0,
             0.15,
-            0.25,
+            0.35,
             1
         ],
         "plot_target_time_target": [
             -0.2,
-            -0.1,
             0,
-            0.15,
-            0.3,
+            0.2,
             0.4
         ],
         "rdm_accuracy_boundary_cue": [
-            0.5,
-            0.57
-        ],
-        "weight_boundary_cue": [
-            -0.2,
-            0.2
+            0,
+            0.07
         ],
         "rdm_accuracy_boundary_target": [
-            0.5,
-            0.6
-        ],
-        "weight_boundary_target": [
-            -0.2,
-            0.2
+            0,
+            0.07
         ],
         "rdm_plot_spacing_boundary": [
             8,
@@ -93,33 +95,34 @@
         ],
         "similarity_index_boundary_cue": [
             0,
-            0.04
+            0.03
         ],
         "similarity_index_boundary_target": [
             0,
             0.06
         ],
+        "attention_passive_category_number_dictionary": {
+            "attention": 14,
+            "passive": 7
+        },
         "category_number_dictionary": {
-            "spaceLeft": 4,
-            "spaceRight": 4,
-            "talkerMale": 3,
-            "talkerFemale": 3,
+            "space": 8,
+            "talker": 6,
             "relax": 7
         },
-        "auditory_attention_categories": [
-            "spaceLeft-spaceRight",
-            "spaceLeft-talkerMale",
-            "spaceLeft-talkerFemale",
-            "spaceLeft-relax",
-            "spaceRight-talkerMale",
-            "spaceRight-talkerFemale",
-            "spaceRight-relax",
-            "talkerMale-talkerFemale",
-            "talkerMale-relax",
-            "talkerFemale-relax"
+        "categories_to_remove": [
+            "space-relax",
+            "talker-relax",
+            "relax-relax"
+        ],
+        "categories_of_interest": [
+            "attention-passive",
+            "space-talker"
         ],
         "significance_alpha": 0.05,
         "significance_n_permutation": 1000,
-        "significance_n_bonferroni_correction": 6
+        "significance_n_bonferroni_correction": 2,
+        "significance_cluster_threshold_p_value": 0.01,
+        "plot_gather_type": "horizontal"
     }
 }

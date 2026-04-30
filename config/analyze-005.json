@@ -1,0 +1,31 @@
+{
+    "mode": "auto",
+    "configuration_id": 5,
+    "description": "RSA with ERP + alpha",
+    "subjects": [
+        3
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "rsa": {
+        "input_folder": "derivatives",
+        "output_folder": "derivatives/rsamultiple",
+        "frequency_band_indices": [2, -1],
+        "decoder_model": "svm",
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "num_condition": 21,
+        "sampling_rate": 512,
+        "target_time_window_ms": 30,
+        "target_time_cue": "all",
+        "target_time_target": "all",
+        "model_regularization_parameter": 0.01,
+        "model_max_iter": 1000
+    }
+}

@@ -1,0 +1,78 @@
+{
+    "mode": "auto",
+    "configuration_id": 6,
+    "description": "RSA with complete timestamp, with haufe tranform, with stronger regularization",
+    "subjects": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "cwt": {
+        "input_folder": "derivatives/epoch",
+        "output_folder": "derivatives/cwt",
+        "num_condition": 21,
+        "num_frequency_bin": 96,
+        "frequency_boundary": [
+            50,
+            30,
+            14,
+            8,
+            4,
+            2
+        ],
+        "scale_spacing_DJ": 0.05
+    },
+    "rsa": {
+        "input_folder": "derivatives",
+        "output_folder": "derivatives/rsa",
+        "frequency_band_indices": [
+            3
+        ],
+        "num_condition": 21,
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "sampling_rate": 512,
+        "target_time_window_ms": 30,
+        "target_time_cue": "all",
+        "target_time_target": "all",
+        "decoder_model": "svm",
+        "model_regularization_parameter": 1,
+        "apply_haufe_transform": 0,
+        "apply_direction_fix": 0
+    }
+}
