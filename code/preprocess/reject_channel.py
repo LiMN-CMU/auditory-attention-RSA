@@ -43,7 +43,7 @@ def run(config, sub_i, mode="manual"):
     out_file.parent.mkdir(parents=True, exist_ok=True)  
 
     print(f"Loading file: {in_file}")
-    raw = mne.io.read_raw_fif(in_file, preload=True)
+    raw = mne.io.read_raw_fif(in_file, preload=True, verbose=False)
     picks_eeg = mne.pick_types(raw.info, meg=False, eeg=True, eog=False, ecg=False, stim=False, exclude=[])
     data_eeg = raw.get_data(picks=picks_eeg)  # shape: (n_eeg_channels, n_samples)
     eeg_ch_names = [raw.ch_names[p] for p in picks_eeg]
@@ -70,7 +70,6 @@ def run(config, sub_i, mode="manual"):
 
     # Combine flagged channels (union of all criteria)
     flagged_channels = list(set(bad_amp) & set(high_var))
-
     print("=== Channels flagged by amplitude:", bad_amp)
     print("=== Channels flagged by high variance:", high_var)
     print("=== Overall flagged channels:", flagged_channels)
@@ -108,7 +107,7 @@ def run(config, sub_i, mode="manual"):
 if __name__ == "__main__":
     # Load config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    parser.add_argument("-c", "--config_id", type=str, default="preprocessing-001", help="Configuration ID")
     args = parser.parse_args()
     config_id = args.config_id
 

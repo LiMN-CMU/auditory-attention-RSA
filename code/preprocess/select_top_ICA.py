@@ -123,7 +123,7 @@ def apply_top_components(config, sub_i, mode="manual"):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    parser.add_argument("-c", "--config_id", type=str, default="preprocessing-001", help="Configuration ID")
     args = parser.parse_args()
 
     config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{args.config_id}.json"
