@@ -21,7 +21,7 @@ def run(config, sub_inds):
 
     feat_i = config_rsa["frequency_band_index"]
     model_type = config_rsa["decoder_model"]
-    categories = config_rsa["auditory_attention_categories"]
+    categories = config_rsa["categories_of_interest"]
     epoch_type_dict = {'cue': config_rsa["epoch_boundary_cue"], 'target': config_rsa["epoch_boundary_target"]}
     plot_gather_type = config_rsa["plot_gather_type"]
 
@@ -79,6 +79,7 @@ def run(config, sub_inds):
 
             for row, cat in enumerate(categories):
                 for col, t in enumerate(target_times):
+                    # fname = in_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_sem_{t:.1f}s_category-{cat}.png'
                     fname = in_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_haufeweights_{t:.1f}s_category-{cat}.png'
                     img = load_image(fname)
                     ax_model[row][col].imshow(img)
@@ -91,6 +92,7 @@ def run(config, sub_inds):
 
             # fig_model.suptitle('Model Weights', fontsize=16)
             fig_model.savefig(
+                # out_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_sem_total.png',
                 out_dir / f'group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_haufeweights_total.png',
                 dpi=500,
                 transparent=False
@@ -130,7 +132,7 @@ def run(config, sub_inds):
 if __name__ == "__main__":
     # Load config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="visualize-001", help="Configuration ID")
+    parser.add_argument("-c", "--config_id", type=str, default="visualize-001", help="Configuration ID")
     args = parser.parse_args()
     config_id = args.config_id
     

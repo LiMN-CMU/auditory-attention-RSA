@@ -16,7 +16,7 @@ from sklearn.preprocessing import StandardScaler
 okabe_ito = [
     # "#E14949",
     # "#91C95A",
-    "#5BB5E5",
+    # "#5BB5E5",
     "#F5A027",
     "#606563"
 ]
@@ -60,7 +60,7 @@ def average_by_category(data, category_num_dict={"space": 8, "talker": 6, "relax
     Returns
     -------
     results : dict
-        Keys: 'catA-catB'
+        Keys: "catA-catB"
         Values:
             Shape (n_subject, timepoints, n_channels) if weights
             Shape (n_subject, timepoints) if RDMs
@@ -113,7 +113,7 @@ def average_by_category(data, category_num_dict={"space": 8, "talker": 6, "relax
 
     return results
 
-def category_dissimilarity_index(avg_results, category_names, time_indices, ci=0.95):
+def category_dissimilarity_index(avg_results, key_pairs_to_compare, time_index, ci=0.95):
     """
     Compute category dissimilarity index (per timepoint) with mean ± margin of error
     across subjects.
@@ -126,54 +126,124 @@ def category_dissimilarity_index(avg_results, category_names, time_indices, ci=0
     category_names : list of str
         Names of the categories, e.g. ["space", "talker", "relax"].
 
-    time_indices : tuple (start_i, end_i)
-        Time window indices to analyze. Only this window will be used.
-
     ci : float, optional
         Confidence interval level (default=0.95).
 
     Returns
     -------
     sim_results : dict
-        Keys: 'catA-catB'
+        Keys: "catA-catB"
         Values: dict with
-            - 'values': array (n_sub, n_time_window)
+            - "values": array (n_sub, n_time_window)
                 Raw dissimilarity values per subject per timepoint.
-            - 'mean': array (n_time_window,)
+            - "mean": array (n_time_window,)
                 Mean across subjects for each timepoint.
-            - 'margin_error': array (n_time_window,)
+            - "margin_error": array (n_time_window,)
                 Margin of error for the CI at each timepoint.
     """
-    start_i, end_i = time_indices
     sim_results = {}
     alpha = 1 - ci
 
-    for i in range(len(category_names)):
-        for j in range(i + 1, len(category_names)):
-            between_key = f"{category_names[i]}-{category_names[j]}"
-            within_A = avg_results[f"{category_names[i]}-{category_names[i]}"][:, start_i: end_i]
-            within_B = avg_results[f"{category_names[j]}-{category_names[j]}"][:, start_i: end_i]
-            between_AB = avg_results[between_key][:, start_i: end_i]
-            
-            # (n_sub, n_time_window)
-            sim_index_vals = between_AB - 0.5 * (within_A + within_B)
-            sim_index_vals = sim_index_vals.mean(axis=1)  # mean across the time window
+    for key_pair in key_pairs_to_compare:
+        category1, category2 = key_pair.split("-")
+        within_A = avg_results[f"{category1}-{category1}"][:, time_index]
+        within_B = avg_results[f"{category2}-{category2}"][:, time_index]
+        between_AB = avg_results[key_pair][:, time_index]
+        
+        sim_index_vals = between_AB - 0.5 * (within_A + within_B)  # (n_sub,)
 
-            # Compute stats across subjects, for each timepoint
-            n_sub = sim_index_vals.shape[0]
-            mean_val = sim_index_vals.mean(axis=0)
-            sem_val = stats.sem(sim_index_vals, axis=0)
-            t_crit = stats.t.ppf(1 - alpha/2, n_sub - 1)
-            margin_error = t_crit * sem_val
+        # Compute stats across subjects, for each timepoint
+        n_sub = sim_index_vals.shape[0]
+        mean_val = sim_index_vals.mean(axis=0)
+        sem_val = stats.sem(sim_index_vals, axis=0)
+        t_crit = stats.t.ppf(1 - alpha/2, n_sub - 1)
+        margin_error = t_crit * sem_val
 
-            sim_results[between_key] = {
-                "values": sim_index_vals,      # shape (n_sub, n_time_window)
-                "mean": mean_val,           
-                "margin_error": margin_error
+        sim_results[key_pair] = {
+            "values": sim_index_vals,      # shape (n_sub,)
+            "mean": mean_val,           
+            "margin_error": margin_error
             }
             
-            # sim_results[between_key] = sim_index_vals.mean()
+    return sim_results
 
+def category_dissimilarity_index_within_subject(avg_results, key_pairs_to_compare, time_index, ci=0.95):
+    """
+    Compute category dissimilarity index with Within-Subject CI correction (Cousineau-Morey).
+    Calculates the dissimilarity for all pairs first, normalizes across them, 
+    then computes statistics.
+    """
+    sim_results = {}
+    alpha = 1 - ci
+    
+    # 1. Collect Raw Data for ALL contrasts first
+    # We need a dictionary to hold the raw difference scores for normalization
+    # Structure: raw_data[key_pair] = array of shape (n_sub,)
+    raw_data = {}
+    
+    n_sub = None
+    
+    for key_pair in key_pairs_to_compare:
+        category1, category2 = key_pair.split("-")
+        within_A = avg_results[f"{category1}-{category1}"][:, time_index]
+        within_B = avg_results[f"{category2}-{category2}"][:, time_index]
+        between_AB = avg_results[key_pair][:, time_index]
+        
+        # Calculate raw dissimilarity (Difference Score)
+        # shape: (n_sub,)
+        sim_vals = between_AB - 0.5 * (within_A + within_B)
+        
+        raw_data[key_pair] = sim_vals
+        if n_sub is None: n_sub = sim_vals.shape[0]
+
+    # 2. Prepare for Normalization
+    # Stack data to shape (n_sub, n_conditions)
+    # This allows us to calculate subject means across the conditions we are comparing
+    conditions_list = list(key_pairs_to_compare)
+    stacked_data = np.stack([raw_data[k] for k in conditions_list], axis=1) # (n_sub, n_conds)
+    
+    # Calculate Subject Means (across the conditions being compared)
+    subj_means = np.mean(stacked_data, axis=1, keepdims=True) # (n_sub, 1)
+    
+    # Calculate Grand Mean (single value)
+    grand_mean = np.mean(stacked_data)
+    
+    # 3. Normalize Data (Cousineau Method)
+    # Y_norm = Y_raw - Subj_Mean + Grand_Mean
+    normalized_data = stacked_data - subj_means + grand_mean
+    
+    # 4. Compute Statistics with Morey Correction
+    M = len(conditions_list) # Number of within-subject conditions
+    morey_correction = np.sqrt(M / (M - 1))
+    
+    t_crit = stats.t.ppf(1 - alpha/2, n_sub - 1)
+
+    for i, key_pair in enumerate(conditions_list):
+        # Get the normalized values for this condition
+        norm_vals_for_cond = normalized_data[:, i]
+        
+        # Mean (should be same as raw mean, but good to ensure consistency)
+        mean_val = np.mean(norm_vals_for_cond)
+        
+        # Standard Error on NORMALIZED data
+        sem_val = stats.sem(norm_vals_for_cond)
+        
+        # Apply Morey Correction
+        sem_corrected = sem_val * morey_correction
+        
+        # Calculate Margin of Error
+        margin_error = t_crit * sem_corrected
+        
+        # Store results
+        # Note: We usually return the 'mean' and 'margin_error' for plotting.
+        # The 'values' returned are the RAW values (for other stats/inspection), 
+        # but the error bars come from the normalized calculation.
+        sim_results[key_pair] = {
+            "values": raw_data[key_pair],  # Keep raw values for transparency
+            "mean": mean_val,
+            "margin_error": margin_error
+        }
+            
     return sim_results
 
 def holm_reject(pvals, alpha=0.05):
@@ -204,7 +274,7 @@ def holm_reject(pvals, alpha=0.05):
         return reject, p_adj
 
 def run_spatiotemporal_cluster_permutation_tests(category_svm_weights, info, ch_type="eeg",
-                                  n_permutations=1000, alpha=0.05, seed=42):
+                                  n_permutations=1000, alpha=0.05, seed=42, cluster_thres=None):
     """
     Run cluster-based permutation tests (TFCE) across all category SVM weights.
 
@@ -215,7 +285,7 @@ def run_spatiotemporal_cluster_permutation_tests(category_svm_weights, info, ch_
     info : mne.Info
         MNE info structure for adjacency.
     ch_type : str
-        Channel type for adjacency (default 'eeg').
+        Channel type for adjacency (default "eeg").
     n_permutations : int
         Number of permutations.
     alpha : float
@@ -246,7 +316,7 @@ def run_spatiotemporal_cluster_permutation_tests(category_svm_weights, info, ch_
         
         T_obs, clusters, cluster_p, H0 = spatio_temporal_cluster_1samp_test(
             cat_val,
-            threshold=None,        # TFCE
+            threshold=cluster_thres,
             tail=0,
             n_permutations=n_permutations,
             adjacency=adj,
@@ -280,9 +350,9 @@ def run_spatiotemporal_cluster_permutation_tests(category_svm_weights, info, ch_
     return results
 
 def run_temporal_cluster_permutation_tests(category_sim_indices,
-                                  n_permutations=1000, alpha=0.05, n_correction=6, seed=42):
+                                  n_permutations=1000, alpha=0.05, n_correction=6, cluster_thres=2.756, seed=42):
     """
-    Run cluster-based permutation tests (TFCE) across all category SVM weights.
+    Run cluster-based permutation tests across all category SVM weights.
 
     Parameters
     ----------
@@ -302,7 +372,6 @@ def run_temporal_cluster_permutation_tests(category_sim_indices,
     results : dict
         Dictionary containing TFCE maps, clusters, p-values, etc.
     """
-    alpha_corrected = alpha / n_correction
     rng = np.random.RandomState(seed)
 
     results = {
@@ -316,11 +385,11 @@ def run_temporal_cluster_permutation_tests(category_sim_indices,
 
         T_obs, clusters, cluster_p, H0 = permutation_cluster_1samp_test(
             sim_indices,
-            threshold=None,        # TFCE
+            threshold=cluster_thres,
             tail=0,
             n_permutations=n_permutations,
             out_type="mask",
-            n_jobs=1,
+            n_jobs=4,
             seed=rng
         )
 
@@ -353,7 +422,7 @@ def window_cluster_mask(results, category_name, time_idx, alpha=0.05, which="wit
     Build a boolean mask over channels indicating membership in any
     significant spatiotemporal cluster that overlaps [t_start:t_end).
 
-    results: dict produced earlier (with 'per_cond' entries)
+    results: dict produced earlier (with "per_cond" entries)
     category_name
     alpha: significance threshold
     Returns: mask_ch (n_chan,) boolean
@@ -489,6 +558,22 @@ def plot_topomap(
     )
     return fig, ax
 
+def plot_sem_topomap(topo_val, info):
+    """
+    topo_val: (n_sub, n_chan)
+    plots SEM across subjects
+    """
+    # SEM across subjects at each time/channel
+    sem = topo_val.std(axis=0, ddof=1) / np.sqrt(topo_val.shape[0])  # (n_chan, )
+
+    fig, ax = plt.subplots()
+    im, _ = mne.viz.plot_topomap(
+        sem, info, axes=ax, show=False,
+        vlim=[0, 0.04]
+    )
+    cbar = fig.colorbar(im, ax=ax)
+    return fig, ax
+
 def plot_dissimilarity_index(group_sim_indices_rdms, n_times, config_rsa, epoch_type, figsize=(12, 2)):
     """
     Plot dissimilarity/similarity index over time with confidence intervals.
@@ -496,7 +581,7 @@ def plot_dissimilarity_index(group_sim_indices_rdms, n_times, config_rsa, epoch_
     Parameters
     ----------
     group_sim_indices_rdms : dict
-        Dictionary with category names as keys and dicts containing 'mean' and 'margin_error'.
+        Dictionary with category names as keys and dicts containing "mean" and "margin_error".
     target_times : list or np.ndarray
         Time points corresponding to the x-axis.
     figsize : tuple
@@ -509,19 +594,24 @@ def plot_dissimilarity_index(group_sim_indices_rdms, n_times, config_rsa, epoch_
     ax : matplotlib.axes._axes.Axes
         The axes object containing the plot.
     """
+    DISPLAY_START, DISPLAY_END = -1.2, 1.1
+    
     fig, ax = plt.subplots(figsize=figsize)
     y_min, y_max = config_rsa[f"similarity_index_boundary_{epoch_type}"]
     start_time, end_time = config_rsa[f"epoch_boundary_{epoch_type}"]
+    target_start_time, target_end_time = config_rsa[f"plot_epoch_boundary_{epoch_type}"]
 
-    x_positions = np.linspace(start_time, end_time, n_times)
+    x_positions_whole = np.linspace(start_time, end_time, n_times)
+    time_mask = (x_positions_whole >= target_start_time) & (x_positions_whole < target_end_time)
 
     for i, (cat_names, vals) in enumerate(group_sim_indices_rdms.items()):
         color = okabe_ito[i % len(okabe_ito)]
-        mean = np.array(vals["mean"])
-        margin = np.array(vals["margin_error"])
+        mean = np.array(vals["mean"])[time_mask]
+        margin = np.array(vals["margin_error"])[time_mask]
+        x_positions = x_positions_whole[time_mask]
 
         # Plot the mean line
-        # ax.plot(x_positions, mean, marker='o', label=cat_names, color=color)
+        # ax.plot(x_positions, mean, marker="o", label=cat_names, color=color)
         ax.plot(x_positions, mean, label=cat_names, color=color)
 
         # Add CI shading (mean ± margin)
@@ -540,14 +630,17 @@ def plot_dissimilarity_index(group_sim_indices_rdms, n_times, config_rsa, epoch_
         plt.xticks([-1, -0.5, 0, 0.5, 1], ["-1000ms", "-500ms", "0ms", "500ms", "1000ms"])
     elif epoch_type == "target":
         # plt.xticks([-0.2, -0.1, 0, 0.15, 0.3, 0.4], ["-200ms", "-100ms", "0ms", "150ms", "300ms", "400ms"])
-        plt.xticks([-0.4, 0, 0.5], ["-400ms", "0ms", "500ms"])
+        plt.xticks([-0.3, 0, 0.3, 0.6], ["-300ms", "0ms", "300ms", "600ms"])
     # plt.ylabel("Similarity Index")
     # ax.set_xticks([])          # remove tick positions
     # ax.set_xticklabels([])     # remove tick labels
-    # ax.spines['bottom'].set_visible(False)  # hide x-axis line
+    # ax.spines["bottom"].set_visible(False)  # hide x-axis line
     ax.set_xlabel("")          # remove x-axis label
 
-    ax.set_ylim((y_min, y_max))  # Example: 0–1 range
+    ax.set_ylim((y_min, y_max))
+    
+    ax.set_xlim(DISPLAY_START, DISPLAY_END)
+    ax.margins(x=0)  # remove the margin
 
     # Apply new legend order
     # handles, labels = ax.get_legend_handles_labels()
@@ -560,17 +653,35 @@ def plot_dissimilarity_index(group_sim_indices_rdms, n_times, config_rsa, epoch_
     fig.tight_layout()
     return fig, ax
 
-def plot_significant_clusters(ax, x_positions, results, cluster_alpha=0.05, y_step=0.04, lw=1.5):
+def plot_significant_clusters(ax, x_positions, results, 
+                              cluster_alpha=0.05, 
+                              min_duration=0,  # <--- NEW PARAMETER (same units as x_positions)
+                              y_step=0.04, lw=1.5):
+    """
+    Plots significant clusters with an optional duration filter.
+    
+    Parameters
+    ----------
+    min_duration : float
+        The minimum duration required to plot a cluster. 
+        MUST be in the same units as x_positions (e.g., 0.02 for 20ms if x is in seconds, 
+        or 20 if x is in ms).
+    """
     x_positions = np.asarray(x_positions)
     n_times = len(x_positions)
+    
+    # Calculate sampling interval (dt) to convert samples to time
+    # Assumes uniform sampling
+    dt = np.mean(np.diff(x_positions))
 
     contrast_names = results.get("contrast_names", list(results["per_cond"].keys()))
     reject_holm = results.get("reject_holm", None)
 
-    trans = ax.get_xaxis_transform()  # x=data, y=axes coords
+    trans = ax.get_xaxis_transform()  # x=data, y=axes coords (0-1)
     y0 = 1.02
 
     for i, cat_name in enumerate(contrast_names):
+        # Skip if Holm-Bonferroni rejection failed (if applicable)
         if reject_holm is not None and not reject_holm[i]:
             continue
 
@@ -579,10 +690,11 @@ def plot_significant_clusters(ax, x_positions, results, cluster_alpha=0.05, y_st
         y = y0 + i * y_step
 
         for cl, pval in zip(rec["clusters"], rec["cluster_p_values"]):
+            # 1. Filter by P-value
             if pval > cluster_alpha:
                 continue
 
-            # convert cluster -> time indices
+            # 2. Convert cluster definition -> time indices
             if isinstance(cl, tuple):
                 c0 = cl[0]
                 if isinstance(c0, slice):
@@ -602,12 +714,25 @@ def plot_significant_clusters(ax, x_positions, results, cluster_alpha=0.05, y_st
             if t_inds.size == 0:
                 continue
 
+            # 3. Identify contiguous segments (handling gaps)
             t_inds = np.unique(np.sort(t_inds))
             breaks = np.where(np.diff(t_inds) > 1)[0]
             starts = np.r_[0, breaks + 1]
             ends = np.r_[breaks, t_inds.size - 1]
 
+            # 4. Iterate over segments and FILTER BY DURATION
             for s, e in zip(starts, ends):
+                # Calculate number of samples in this segment
+                n_samples_in_segment = (e - s + 1)
+                
+                # Convert to time duration
+                segment_duration = n_samples_in_segment * dt
+                
+                # CHECK: Is the segment too short?
+                if segment_duration < min_duration:
+                    continue # Skip drawing this segment
+
+                # Draw the line
                 ax.hlines(y, x_positions[t_inds[s]], x_positions[t_inds[e]],
                           color=color, lw=lw, transform=trans, clip_on=False)
 
@@ -634,8 +759,14 @@ def plot_rdms(target_rdm_spaced, acc_min, acc_max, figsize=(8, 8), cmap="viridis
         The axes object containing the heatmap.
     """
     fig, ax = plt.subplots(figsize=figsize)
+    # Create a mask for the diagonal
+    # mask = np.eye(target_rdm_spaced.shape[0], dtype=bool)
+    mask = np.triu(np.ones_like(target_rdm_spaced, dtype=bool), k=0)
+    # Set the background color of the axes to gray
+    ax.set_facecolor('#d3d3d3') # Light gray hex code
     sns.heatmap(
         target_rdm_spaced,
+        mask=mask,
         cmap=cmap,
         square=True,
         cbar=False,
@@ -662,29 +793,67 @@ def run(config, sub_inds):
     analysis_config_id = config_rsa["analysis-config-id"]
     model_type = config_rsa["decoder_model"]
     fs = config_rsa["sampling_rate"]
-    window_ms = config_rsa["target_time_window_ms"]  # ms window
-    window_samples = int((window_ms / 1000) * fs)  # Convert ms to samples
     
     feat_i = config_rsa["frequency_band_index"]
     breaks = config_rsa["rdm_plot_spacing_boundary"]  # where to insert spacing between groups
     category_num_dict = config_rsa["category_number_dictionary"]
+    attend_category_num_dict = config_rsa["attention_passive_category_number_dictionary"] if config_rsa.get("attention_passive_category_number_dictionary") else None
+    categories_of_interest = config_rsa["categories_of_interest"]
+    
+    alpha = config_rsa["significance_alpha"]
+    n_perm = config_rsa["significance_n_permutation"]
+    n_corr = config_rsa["significance_n_bonferroni_correction"]
+    cluster_p_threshold = config_rsa["significance_cluster_threshold_p_value"]
+    
+    exclude_subs = config_rsa["participant_indices_to_exclude_in_visualization"]
+    exclude_idx = []
+    for exclude_sub in exclude_subs:
+        exclude_i = sub_inds.index(exclude_sub)
+        exclude_idx.append(exclude_i)
     
     montage_p = base_dir / "etc"
     montage = mne.channels.read_custom_montage(montage_p / "chanlocs_64_3_eye_chan.locs")
     ch_names = montage.ch_names[:64]  # Ensure matching length  TODO: n_channel hardcoded
     # Create MNE Info object
-    info = mne.create_info(ch_names=ch_names, sfreq=fs, ch_types=['eeg'] * 64)
+    info = mne.create_info(ch_names=ch_names, sfreq=fs, ch_types=["eeg"] * 64)
     info.set_montage(montage, on_missing="raise")
 
-    epoch_type_dict = {'cue': config_rsa["epoch_boundary_cue"], 'target': config_rsa["epoch_boundary_target"]}
+    epoch_type_dict = {"cue": config_rsa["epoch_boundary_cue"], "target": config_rsa["epoch_boundary_target"]}
     for epoch_type, epoch_boundary in epoch_type_dict.items():
         print(f"=== Loading {epoch_type} epochs ===")
         acc_min = config_rsa[f"rdm_accuracy_boundary_{epoch_type}"][0] 
         acc_max = config_rsa[f"rdm_accuracy_boundary_{epoch_type}"][1]
 
-        all_rdms = np.load(in_dir / "group" / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_rdm.npy")
-        all_svm_weights = np.load(in_dir / "group" / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_haufeweights.npy")
-        
+        group_rdm_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{analysis_config_id}_rdm.npy"
+        group_weights_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{analysis_config_id}_haufeweights.npy"
+        if (in_dir / "group" / group_rdm_name).exists():
+            print(f"Loading stacked rdms & weights: {group_rdm_name}")
+            all_rdms = np.load(in_dir / "group" / group_rdm_name)
+            all_svm_weights = np.load(in_dir / "group" / group_weights_name)
+        else:
+            all_rdms = [] # (n_subjects, n_time, n_cond, n_cond)
+            all_svm_weights = []
+            for sub_i in sub_inds:
+                sub_str = f"sub-{sub_i:03d}"
+                print(f"\n=== Processing subject: {sub_str} ===")
+                bids_in = BIDSPath(
+                    subject=sub_str.split('-')[1],
+                    task=task,
+                    processing=in_dir.name,
+                    datatype="eeg",
+                    root=in_dir,
+                    description=epoch_type
+                )
+                in_file = bids_in.fpath
+                rdms = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_model-{model_type}_config-{analysis_config_id}_target-time-only_rdm.npy")
+                svm_weights = np.load(in_file.parent / f"{in_file.stem}_feat-{feat_i}_model-{model_type}_config-{analysis_config_id}_target-time-only_weights.npy")
+                all_rdms.append(rdms)
+                all_svm_weights.append(svm_weights)
+            all_rdms = np.array(all_rdms)  # shape: (n_sub, n_time, n_cond, n_cond)
+            all_svm_weights = np.array(all_svm_weights)  # shape: (n_sub, n_time, n_cond, n_cond, n_channel)
+
+        all_rdms = np.delete(all_rdms, exclude_idx, axis=0)
+        all_svm_weights = np.delete(all_svm_weights, exclude_idx, axis=0)
         print(all_rdms.shape)
         print(all_svm_weights.shape)
         
@@ -692,119 +861,133 @@ def run(config, sub_inds):
         time_vec = np.linspace(epoch_boundary[0], epoch_boundary[1], n_time)
         
         plot_target_times = config_rsa[f"plot_target_time_{epoch_type}"]
-        plot_target_time_indices = [np.argmin(np.abs(time_vec - t)) for t in plot_target_times]
-        
-        # average across subjects
-        group_avg_rdms = np.mean(all_rdms, axis=0)  # shape: (n_time, n_cond, n_cond)
+        plot_target_times_dict = {np.argmin(np.abs(time_vec - t)): t for t in plot_target_times}
         
         # average by task category 
         all_category_svm_weights = average_by_category(all_svm_weights, category_num_dict=category_num_dict)
+        if attend_category_num_dict is not None:
+            attend_category_svm_weights = average_by_category(all_svm_weights, category_num_dict=attend_category_num_dict)
+            all_category_svm_weights.update(attend_category_svm_weights.items())
+        
+        # select only the wanted pairs
+        all_category_svm_weights = {k: v for k, v in all_category_svm_weights.items() if k in categories_of_interest}
+
+        # 2-2. plot masked svm weights map
+        # cluster based permutation test
+        spatiotemp_results = run_spatiotemporal_cluster_permutation_tests(
+            all_category_svm_weights, info, n_permutations=n_perm, alpha=alpha
+            )
+        
+        # average across subjects
+        group_avg_rdms = np.mean(all_rdms, axis=0)  # shape: (n_time, n_cond, n_cond)
         group_category_svm_weights = dict()
         for cat_names, cat_vals in all_category_svm_weights.items():
             group_category_svm_weights[cat_names] = np.mean(cat_vals, axis=0)  # average across subjects
         
-        # Target time analysis
-        for target_time, target_time_idx in zip(plot_target_times, plot_target_time_indices):
-            window_start = max(0, target_time_idx - window_samples // 2)
-            window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
-            window_rdms = group_avg_rdms[window_start:window_end]
-            target_rdm = np.mean(window_rdms, axis=0)
-
-            # 1. Plot RDMs
-            # Add visual spacing between condition groups
-            target_rdm_spaced = add_spacing(target_rdm, breaks)
-            fig, ax = plot_rdms(target_rdm_spaced, acc_min, acc_max)
-            out_file = out_dir / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_rdm_{target_time:.1f}s.png"
-            out_file.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(out_file, dpi=300, transparent=True)
-            plt.close(fig)
-            
-            # 2-1. Plot SVM weight importance map
-            for cat_name, cat_weights in group_category_svm_weights.items():
-                window_svm_weights = cat_weights[window_start:window_end]
-                target_svm_weights = np.mean(window_svm_weights, axis=0)
-                
-                evoked = mne.EvokedArray(target_svm_weights[:, np.newaxis], info)  # Add time dimension
-                fig, ax = plot_topomap(
-                    evoked=evoked,
-                    config_rsa=config_rsa, 
-                    epoch_type=epoch_type
-                )
-                
-                fig_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_haufeweights_{target_time:.1f}s_category-{cat_name}"
-                fig.savefig(out_file.parent / f"{fig_name}.png", dpi=300, transparent=True)
-                plt.close(fig)
-
         # Whole time analysis
         # average by task category 
         all_category_rdms = average_by_category(all_rdms, category_num_dict=category_num_dict)
-
-        # average across subjects
+        if attend_category_num_dict is not None:
+            attend_category_rdms = average_by_category(all_rdms, category_num_dict=attend_category_num_dict)
+            all_category_rdms.update(attend_category_rdms.items())
+        
+        # select only the wanted pairs
+        categories_of_interest_for_sim_indices = []
+        for cat_pair in categories_of_interest:
+            cat1, cat2 = cat_pair.split("-")
+            categories_of_interest_for_sim_indices.append(cat_pair)
+            categories_of_interest_for_sim_indices.append(f"{cat1}-{cat1}")  # add within pairs
+            categories_of_interest_for_sim_indices.append(f"{cat2}-{cat2}")
+        all_category_rdms = {k: v for k, v in all_category_rdms.items() if k in categories_of_interest_for_sim_indices}
+    
+        # gather subject-averaged dissimilarity index
         group_sim_indices_rdms = defaultdict(lambda: {"values": [], "mean": [], "margin_error": []})
         
-        category_svm_weights = defaultdict(list)
         for time_idx in range(len(time_vec)):        
-            window_start = max(0, time_idx - window_samples // 2)
-            window_end = min(n_time, time_idx + window_samples // 2 + 1)    
+            # calculate dissimilarity index
+            sim_indices_rdms = category_dissimilarity_index(all_category_rdms, categories_of_interest, time_idx)
+            # sim_indices_rdms = category_dissimilarity_index_within_subject(all_category_rdms, categories_of_interest, time_idx)
             
-            # dissimilarity index
-            sim_indices_rdms = category_dissimilarity_index(all_category_rdms, list(category_num_dict.keys()), [window_start, window_end])
             for cat_names, cat_values in sim_indices_rdms.items():
                 group_sim_indices_rdms[cat_names]["values"].append(cat_values["values"])
                 group_sim_indices_rdms[cat_names]["mean"].append(cat_values["mean"])
                 group_sim_indices_rdms[cat_names]["margin_error"].append(cat_values["margin_error"])
                 
-            # for cluster based permutation test
-            for cat_name, cat_val in all_category_svm_weights.items():
-                target_val = cat_val[:, window_start:window_end, :]  # (n_sub, n_time, n_channel)
-                category_svm_weights[cat_name].append(np.mean(target_val, axis=1)) # (n_sub, n_channel)
-        for cat_name, cat_val in category_svm_weights.items():
-            category_svm_weights[cat_name] = np.stack(cat_val, axis=1)
-            
-        alpha = config_rsa["significance_alpha"]
-        n_perm = config_rsa["significance_n_permutation"]
-        n_corr = config_rsa["significance_n_bonferroni_correction"]
+            if time_idx in plot_target_times_dict.keys():  # to plot & save
+                target_time = plot_target_times_dict[time_idx]
+                target_rdm = group_avg_rdms[time_idx]
 
-        # 2-2. plot masked svm weights map
-        cluster based permutation test
-        results = run_spatiotemporal_cluster_permutation_tests(
-            all_category_svm_weights, info, n_permutations=n_perm, alpha=alpha
-            )
-        
-        for target_time, target_time_idx in zip(plot_target_times, plot_target_time_indices):
-            window_start = max(0, target_time_idx - window_samples // 2)
-            window_end = min(n_time, target_time_idx + window_samples // 2 + 1)
-            
-            for cat_name, cat_weights in group_category_svm_weights.items():
-                window_svm_weights = cat_weights[window_start:window_end]
-                target_svm_weights = np.mean(window_svm_weights, axis=0)
-                
-                mask_ch = window_cluster_mask(results, cat_name, target_time_idx, alpha=alpha)
-                fig, ax = plot_topomap(
-                    weights=target_svm_weights,
-                    info=info,
-                    mask_ch=mask_ch,
-                    config_rsa=config_rsa,
-                    epoch_type=epoch_type,
-                )
-
-                fig_name = (
-                    f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_"
-                    f"config-{config_id}_haufeweights_{target_time:.1f}s_category-{cat_name}-masked"
-                )
-                fig.savefig(out_dir / f"{fig_name}.png", dpi=300, transparent=False)
+                # 1. Plot RDMs
+                # Add visual spacing between condition groups
+                target_rdm_spaced = add_spacing(target_rdm, breaks)
+                fig, ax = plot_rdms(target_rdm_spaced, acc_min, acc_max)
+                out_file = out_dir / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_rdm_{target_time:.1f}s.png"
+                out_file.parent.mkdir(parents=True, exist_ok=True)
+                fig.savefig(out_file, dpi=300, transparent=True)
                 plt.close(fig)
-            
-        # # filter meaningful pairs TODO; hard-coded
-        # wanted_pairs = ["spaceLeft-spaceRight", "talkerMale-talkerFemale"]
-        # selected_group_sim_indices_rdms = {key: group_sim_indices_rdms[key] for key in wanted_pairs if key in group_sim_indices_rdms}
+                
+                # 2-0. for SEM topomap
+                for cat_name, cat_val in all_category_svm_weights.items():
+                    target_val = cat_val[:, time_idx, :]  # (n_sub, n_time, n_channel)
+                    # individual SVM topoplot (for sanity check)
+                    for sub_i, sub_name in enumerate(sub_inds):
+                        evoked = mne.EvokedArray(cat_val[sub_i, time_idx, :, np.newaxis], info)  # Add time dimension
+                        fig, ax = plot_topomap(
+                            evoked=evoked,
+                            config_rsa=config_rsa, 
+                            epoch_type=epoch_type
+                        )
+                        
+                        fig_name = f"sub-{sub_name}_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_haufeweights_{target_time:.1f}s_category-{cat_name}"
+                        fig.savefig(out_file.parent / f"{fig_name}.png", dpi=300, transparent=True)
+                        plt.close(fig)
+                    fig, ax = plot_sem_topomap(topo_val=target_val, info=info)
+                    
+                    fig_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_sem_{target_time:.1f}s_category-{cat_name}"
+                    fig.savefig(out_file.parent / f"{fig_name}.png", dpi=300, transparent=True)
+                    plt.close(fig)
+                
+                # 2-1. Plot SVM weight importance map
+                for cat_name, cat_weights in group_category_svm_weights.items():
+                    target_svm_weights = cat_weights[time_idx]
+                    
+                    evoked = mne.EvokedArray(target_svm_weights[:, np.newaxis], info)  # Add time dimension
+                    fig, ax = plot_topomap(
+                        evoked=evoked,
+                        config_rsa=config_rsa, 
+                        epoch_type=epoch_type
+                    )
+                    
+                    fig_name = f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_haufeweights_{target_time:.1f}s_category-{cat_name}"
+                    fig.savefig(out_file.parent / f"{fig_name}.png", dpi=300, transparent=True)
+                    plt.close(fig)
+                    
+                    # 2-2. Plot masked SVM weight importance map
+                    mask_ch = window_cluster_mask(spatiotemp_results, cat_name, time_idx, alpha=alpha)
+                    fig, ax = plot_topomap(
+                        weights=target_svm_weights,
+                        info=info,
+                        mask_ch=mask_ch,
+                        config_rsa=config_rsa,
+                        epoch_type=epoch_type,
+                    )
+
+                    fig_name = (
+                        f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_"
+                        f"config-{config_id}_haufeweights_{target_time:.1f}s_category-{cat_name}-masked"
+                    )
+                    fig.savefig(out_dir / f"{fig_name}.png", dpi=300, transparent=False)
+                    plt.close(fig)
         
         # 3. Plot dissimilarity index        
-        results = run_temporal_cluster_permutation_tests(
+        df = len(sub_inds) - 1
+        t_thresh = stats.t.ppf(1 - (cluster_p_threshold / 2), df)
+        temporal_results = run_temporal_cluster_permutation_tests(
             group_sim_indices_rdms,
             n_permutations=n_perm,
             alpha=alpha,
-            n_correction=n_corr
+            n_correction=n_corr,
+            cluster_thres=t_thresh
         )
         fig, ax = plot_dissimilarity_index(
             group_sim_indices_rdms,
@@ -815,7 +998,7 @@ def run(config, sub_inds):
         )    
         start_time, end_time = config_rsa[f"epoch_boundary_{epoch_type}"]
         x_positions = np.linspace(start_time, end_time, len(time_vec))
-        plot_significant_clusters(ax, x_positions, results)
+        plot_significant_clusters(ax, x_positions, temporal_results, min_duration=0.05)  # 20ms, TODO: hard-coded
         out_file = out_dir / "group" / f"group_task-{task}_desc-{epoch_type}_feat-{feat_i}_model-{model_type}_config-{config_id}_sim-index.png"
         out_file.parent.mkdir(exist_ok=True, parents=True)
         fig.savefig(out_file, dpi=600, transparent=True)
@@ -824,7 +1007,7 @@ def run(config, sub_inds):
 if __name__ == "__main__":
     # Load config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config_id", type=str, default="visualize-001", help="Configuration ID")
+    parser.add_argument("-c", "--config_id", type=str, default="visualize-001", help="Configuration ID")
     args = parser.parse_args()
     config_id = args.config_id
 
