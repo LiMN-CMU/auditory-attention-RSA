@@ -1,7 +1,13 @@
+import argparse
+import json
 from pathlib import Path
 import mne
 from mne_bids import BIDSPath
 from mne.preprocessing import ICA
+from mne import set_config
+
+set_config('MNE_USE_NUMBA', 'true')  # Enable JIT acceleration
+# set_config('MNE_NUM_THREADS', '4')   # Use 4 CPU threads TODO: hard-coded
 
 # Parameters
 def run(config, sub_i):
@@ -67,3 +73,17 @@ def run(config, sub_i):
     raw.save(out_file.with_suffix(".fif"), overwrite=True)
 
     print(f"Processed and saved: {out_file}")
+
+
+if __name__ == "__main__":
+    # Load config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)

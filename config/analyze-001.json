@@ -1,0 +1,58 @@
+{
+    "mode": "auto",
+    "configuration_id": 1,
+    "description": "single RSA",
+    "subjects": [
+        3
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "cwt": {
+        "input_folder": "derivatives/epoch",
+        "output_folder": "derivatives/cwt",
+        "num_condition": 21,
+        "num_frequency_bin": 96,
+        "frequency_boundary": [
+            50,
+            30,
+            14,
+            8,
+            4,
+            2
+        ],
+        "scale_spacing_DJ": 0.05
+    },
+    "rsa": {
+        "input_folder": "derivatives/cwt",
+        "output_folder": "derivatives/rsa",
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "sampling_rate": 512,
+        "target_time_window_ms": 30,
+        "target_time_cue": [
+            -1.1,
+            -0.5,
+            0,
+            0.15,
+            0.25,
+            1
+        ],
+        "target_time_target": [
+            -0.2,
+            -0.1,
+            0,
+            0.15,
+            0.3,
+            0.4
+        ],
+        "frequency_band_index": 2,
+        "decoder_model": "svm",
+        "model_regularization_parameter": 1
+    }
+}

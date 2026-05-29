@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import json
 import mne
@@ -79,7 +80,7 @@ def run(config, sub_i, mode="manual"):
     
     # interpolated the bad channels after ICA
     raw.interpolate_bads(reset_bads=True)
-
+    
     # Save
     raw.save(out_file.with_suffix(".fif"), overwrite=True)
     
@@ -96,3 +97,17 @@ def run(config, sub_i, mode="manual"):
             json.dump(ica_result_meta_dict, f, indent=4)
 
         print(f"Saved ICA rejection metadata to: {json_outfile}")
+        
+        
+if __name__ == "__main__":
+    # Load config
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config_id", type=str, default="preprocessing-001", help="Configuration ID")
+    args = parser.parse_args()
+    config_id = args.config_id
+
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / f"{config_id}.json"
+    with open(config_path, "r") as f:
+        config = json.load(f)
+    for sub_i in config["subjects"]:
+        run(config, sub_i)

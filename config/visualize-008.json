@@ -1,0 +1,140 @@
+{
+    "mode": "auto",
+    "configuration_id": 8,
+    "description": "accuarcy noise floor 0.5 + different categorization + with replaced subjects",
+    "subjects": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34
+    ],
+    "subjects_to_replace": [
+        2,
+        18,
+        29
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "visualize_rsa": {
+        "input_folder": "derivatives/rsa",
+        "output_folder": "derivatives/visualizersa",
+        "original_data_folder": "derivatives/cwt",
+        "decoder_model": "svm",
+        "analysis-config-id": 8,
+        "frequency_band_index": 2,
+        "num_condition": 21,
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "plot_epoch_boundary_cue": [
+            -1.15,
+            1.05
+        ],
+        "plot_epoch_boundary_target": [
+            -0.4,
+            0.7
+        ],
+        "sampling_rate": 512,
+        "target_time_window_ms": 30,
+        "target_time_cue": "all",
+        "target_time_target": "all",
+        "plot_target_time_cue": [
+            -1.1,
+            -0.5,
+            0,
+            0.15,
+            0.35,
+            1
+        ],
+        "plot_target_time_target": [
+            -0.2,
+            0,
+            0.2,
+            0.4
+        ],
+        "rdm_accuracy_boundary_cue": [
+            0.5,
+            0.57
+        ],
+        "weight_boundary_cue": [
+            -0.1,
+            0.1
+        ],
+        "rdm_accuracy_boundary_target": [
+            0.5,
+            0.57
+        ],
+        "weight_boundary_target": [
+            -0.1,
+            0.1
+        ],
+        "rdm_plot_spacing_boundary": [
+            8,
+            15
+        ],
+        "similarity_index_boundary_cue": [
+            0,
+            0.05
+        ],
+        "similarity_index_boundary_target": [
+            0,
+            0.05
+        ],
+        "attention_passive_category_number_dictionary": {
+            "attention": 14,
+            "passive": 7
+        },
+        "category_number_dictionary": {
+            "space": 8,
+            "talker": 6,
+            "relax": 7
+        },
+        "categories_to_remove": [
+            "space-relax",
+            "talker-relax",
+            "relax-relax"
+        ],
+        "categories_of_interest": [
+            "attention-passive",
+            "space-talker"
+        ],
+        "significance_alpha": 0.05,
+        "significance_n_permutation": 1000,
+        "significance_n_bonferroni_correction": 2,
+        "significance_cluster_threshold_p_value": 0.01,
+        "plot_gather_type": "horizontal",
+        "participant_indices_to_exclude_in_visualization": [
+        ]
+    }
+}

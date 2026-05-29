@@ -1,6 +1,6 @@
 {
     "mode": "auto",
-    "configuration_id": 1,
+    "configuration_id": 2,
     "subjects": [
         2,
         4,
@@ -73,9 +73,12 @@
         "ICA_stop_tolerance": 1e-10,
         "ICA_method": "infomax"
     },
-    "apply_ICA": {
+    "select_top_ICA": {
         "input_folder": "derivatives/ICAcalculate",
-        "output_folder": "derivatives/ICAreject",
+        "output_folder": "derivatives/ICAselect",
+        "use_top_n_components": true,
+        "n_keep_components": 25,
+        "explained_variance_thres": 0.95,
         "iclabel_component_threshold": 15,
         "iclabel_proability_threshold": 0.9,
         "iclabel_bad_class": [
@@ -83,8 +86,8 @@
         ]
     },
     "epoch": {
-        "input_folder": "derivatives/ICAreject",
-        "output_folder": "derivatives/epoch",
+        "input_folder": "derivatives/ICAselect",
+        "output_folder": "derivatives/epochselect",
         "epoch_boundary_cue": [
             -1.3,
             1

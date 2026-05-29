@@ -1,0 +1,125 @@
+{
+    "mode": "auto",
+    "configuration_id": 3,
+    "description": "sub category weight map",
+    "subjects": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34
+    ],
+    "task": "craa",
+    "base_dir": "/user_data/jinheek/auditory-attention-RSA/data",
+    "visualize_rsa": {
+        "input_folder": "derivatives/rsa",
+        "output_folder": "derivatives/visualizersa",
+        "decoder_model": "svm",
+        "analysis-config-id": 1,
+        "frequency_band_index": -1,
+        "model_regularization_parameter": 0.00001,
+        "epoch_boundary_cue": [
+            -1.2,
+            1.1
+        ],
+        "epoch_boundary_target": [
+            -0.4,
+            1.1
+        ],
+        "sampling_rate": 512,
+        "target_time_window_ms": 30,
+        "target_time_cue": "all",
+        "target_time_target": "all",
+        "plot_target_time_cue": [
+            -1.1,
+            -0.5,
+            0,
+            0.15,
+            0.25,
+            1
+        ],
+        "plot_target_time_target": [
+            -0.2,
+            -0.1,
+            0,
+            0.15,
+            0.3,
+            0.4
+        ],
+        "rdm_accuracy_boundary_cue": [
+            0.5,
+            0.57
+        ],
+        "weight_boundary_cue": [
+            -0.2,
+            0.2
+        ],
+        "rdm_accuracy_boundary_target": [
+            0.5,
+            0.6
+        ],
+        "weight_boundary_target": [
+            -0.2,
+            0.2
+        ],
+        "rdm_plot_spacing_boundary": [
+            8,
+            15
+        ],
+        "similarity_index_boundary_cue": [
+            0,
+            0.04
+        ],
+        "similarity_index_boundary_target": [
+            0,
+            0.06
+        ],
+        "category_number_dictionary": {
+            "spaceLeft": 4,
+            "spaceRight": 4,
+            "talkerMale": 3,
+            "talkerFemale": 3,
+            "relax": 7
+        },
+        "auditory_attention_categories": [
+            "spaceLeft-spaceRight",
+            "spaceLeft-talkerMale",
+            "spaceLeft-talkerFemale",
+            "spaceLeft-relax",
+            "spaceRight-talkerMale",
+            "spaceRight-talkerFemale",
+            "spaceRight-relax",
+            "talkerMale-talkerFemale",
+            "talkerMale-relax",
+            "talkerFemale-relax"
+        ],
+        "significance_alpha": 0.05,
+        "significance_n_permutation": 1000,
+        "significance_n_bonferroni_correction": 6
+    }
+}
