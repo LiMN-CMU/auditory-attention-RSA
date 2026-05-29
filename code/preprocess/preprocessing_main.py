@@ -7,6 +7,7 @@ import reject_channel
 import calculate_ICA
 import apply_ICA
 import epoch
+import multiprocessing
 
 def process_subject(sub_id):
     print("Converting to BIDS format...")
